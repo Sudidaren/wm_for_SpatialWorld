@@ -18,13 +18,16 @@ import pickle
 import re
 from typing import Any, Dict, List, Optional
 
+_DATA_ROOT = os.environ.get("LIGHTWM_DATA_ROOT", "/mnt/d/lightwm_data")
+_COV_ROOT = os.environ.get("LIGHTWM_COV_ROOT", "/mnt/d/lightwm_data_cov")
+
 EPISODES_GLOBS = [
-    "/mnt/d/lightwm_data/episodes/*/episode.json",
-    "/mnt/d/lightwm_data_cov/episodes/*/episode.json",
+    os.path.join(_DATA_ROOT, "episodes", "*", "episode.json"),
+    os.path.join(_COV_ROOT, "episodes", "*", "episode.json"),
 ]
 SCENE_GT_GLOBS = [
-    "/mnt/d/lightwm_data/scene_gt/*.json",
-    "/mnt/d/lightwm_data_cov/scene_gt/*.json",
+    os.path.join(_DATA_ROOT, "scene_gt", "*.json"),
+    os.path.join(_COV_ROOT, "scene_gt", "*.json"),
 ]
 DEFAULT_INDEX = "/home/sudidaren/lightwm_phases/data/frame_index.pkl"
 

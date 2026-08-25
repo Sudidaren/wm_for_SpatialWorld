@@ -16,8 +16,10 @@ from typing import Any, Dict, List
 sys.path.insert(0, os.path.dirname(__file__))
 from data_index import classify_error  # noqa: E402
 
-FD_GLOB = ("/mnt/d/fd_benchmark_full_20260811_224644/ai2thor/"
-           "run_20260811_224645/*/episode_*.json")
+_FD_ROOT = os.environ.get("LIGHTWM_FD_ROOT",
+                          "/mnt/d/fd_benchmark_full_20260811_224644")
+FD_GLOB = os.path.join(_FD_ROOT, "ai2thor", "run_20260811_224645",
+                       "*", "episode_*.json")
 DEFAULT_FD_INDEX = "/home/sudidaren/lightwm_phases/data/fd_index.pkl"
 
 
