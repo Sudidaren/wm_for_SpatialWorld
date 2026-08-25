@@ -1,0 +1,5 @@
+data/*.pkl
+.venv/
+checkpoints/
+checkpoints_smoke/
+phase_d/configs/

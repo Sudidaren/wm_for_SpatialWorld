@@ -1,0 +1,169 @@
+"""PyTorch datasets for Phase B perception / depth / feasibility training."""
+
+from __future__ import annotations
+
+import os
+import sys
+
+import numpy as np
+import torch
+from PIL import Image
+from torch.utils.data import Dataset
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from shared.data_index import load_index  # noqa: E402
+
+IMG_SIZE = 224
+DEPTH_SIZE = 56
+MAX_BOXES = 30
+EXCLUDE_TYPES = {"Floor", "Wall", "Ceiling", "Window"}
+
+
+def load_rgb(path: str, size: int = None) -> np.ndarray:
+    size = size or IMG_SIZE
+    with Image.open(path) as im:
+        return np.asarray(im.convert("RGB").resize((size, size)), dtype=np.float32) / 255.0
+
+
+def load_depth(path: str, size: int = None) -> np.ndarray:
+    size = size or DEPTH_SIZE
+    with Image.open(path) as im:
+        d = np.asarray(im.convert("I").resize((size, size), Image.NEAREST),
+                       dtype=np.float32) / 1000.0
+    return d
+
+
+def has_image(fr: dict) -> bool:
+    return bool(fr.get("rgb")) and not fr["rgb"].endswith("/")
+
+
+class PerceptionDataset(Dataset):
+    """Frame -> (rgb, gt boxes [cx,cy,w,h], object class ids, depth target)."""
+
+    def __init__(self, index=None, limit: int = 0, seed: int = 0):
+        self.index = index if index is not None else load_index()
+        frames = self.index["frames"]
+        self.types = self.index["object_types"]
+        self.type2id = {t: i for i, t in enumerate(self.types)}
+        self.exclude = {self.type2id[t] for t in EXCLUDE_TYPES if t in self.type2id}
+        frames = [f for f in frames if has_image(f)]
+        if limit:
+            rng = np.random.RandomState(seed)
+            frames = [frames[i] for i in rng.choice(len(frames), limit, replace=False)]
+        self.frames = frames
+
+    def __len__(self):
+        return len(self.frames)
+
+    def __getitem__(self, i: int):
+        fr = self.frames[i]
+        rgb = load_rgb(fr["rgb"])
+        depth = load_depth(fr["depth"])
+        sx, sy = 1.0 / 800.0, 1.0 / 600.0
+        boxes, classes = [], []
+        for o in fr["visible"]:
+            t = self.type2id.get(o["type"])
+            if t is None or t in self.exclude:
+                continue
+            b = o["bbox"]
+            if b is None:
+                continue
+            x1, y1, x2, y2 = b
+            if x2 <= x1 or y2 <= y1:
+                continue
+            if (x2 - x1) < 2 or (y2 - y1) < 2:   # raw-pixel minimum size
+                continue
+            cx = (x1 + x2) / 2 * sx
+            cy = (y1 + y2) / 2 * sy
+            w = (x2 - x1) * sx
+            h = (y2 - y1) * sy
+            boxes.append([cx, cy, w, h])
+            classes.append(t)
+        if not boxes:
+            boxes = [[0.0, 0.0, 0.0, 0.0]]
+            classes = [0]
+        boxes = np.asarray(boxes, dtype=np.float32)[:MAX_BOXES]
+        classes = np.asarray(classes, dtype=np.int64)[:MAX_BOXES]
+        n = boxes.shape[0]
+        if n < MAX_BOXES:
+            pad = np.zeros((MAX_BOXES - n, 4), dtype=np.float32)
+            boxes = np.concatenate([boxes, pad])
+            classes = np.concatenate([classes, np.zeros(MAX_BOXES - n, dtype=np.int64)])
+        return {
+            "rgb": torch.from_numpy(rgb).permute(2, 0, 1),
+            "boxes": torch.from_numpy(boxes),
+            "classes": torch.from_numpy(classes),
+            "num_boxes": torch.tensor(n),
+            "depth": torch.from_numpy(depth).unsqueeze(0),
+        }
+
+
+class FeasibilityDataset(Dataset):
+    """Frame + action -> P(success) + error class (supervised by the simulator
+    labels recorded for the action taken from this observation)."""
+
+    def __init__(self, index=None, limit: int = 0, seed: int = 0,
+                 use_fd: bool = True):
+        self.index = index if index is not None else load_index()
+        frames = self.index["frames"]
+        self.actions = self.index["actions"]
+        self.action2id = {a: i for i, a in enumerate(self.actions)}
+        self.errors = self.index["error_classes"]
+        self.err2id = {e: i for i, e in enumerate(self.errors)}
+        self.types = self.index["object_types"]
+        self.type2id = {t: i for i, t in enumerate(self.types)}
+        # only frames with a meaningful action
+        frames = [f for f in frames if f["action"] in self.action2id
+                  and f["action"] not in ("Teleport", "Pass", "Done")
+                  and has_image(f)]
+        if limit:
+            rng = np.random.RandomState(seed)
+            frames = [frames[i] for i in rng.choice(len(frames), limit, replace=False)]
+        # merge FD frames (richer error distribution, RGB + labels only)
+        if use_fd:
+            try:
+                from shared.fd_index import load_fd_index
+                fd = load_fd_index()
+                fd_frames = [
+                    f for f in fd["frames"]
+                    if f["action"] in self.action2id and
+                    f["error_class"] in self.err2id
+                ]
+                print(f"[FeasibilityDataset] merged {len(fd_frames)} FD frames")
+                frames = frames + fd_frames
+            except Exception as e:
+                print(f"[FeasibilityDataset] FD merge skipped: {e}")
+        self.frames = frames
+
+    def __len__(self):
+        return len(self.frames)
+
+    def __getitem__(self, i: int):
+        fr = self.frames[i]
+        rgb = load_rgb(fr["rgb"])
+        act_id = self.action2id[fr["action"]]
+        arg_type = 0
+        arg = fr.get("action_args", {}) or {}
+        oid = arg.get("objectId") or arg.get("object_id") or ""
+        if oid:
+            arg_type = self.type2id.get(oid.split("_")[0], 0)
+        return {
+            "rgb": torch.from_numpy(rgb).permute(2, 0, 1),
+            "action": torch.tensor(act_id, dtype=torch.long),
+            "arg_type": torch.tensor(arg_type, dtype=torch.long),
+            "success": torch.tensor(float(fr["success"])),
+            "error_class": torch.tensor(self.err2id[fr["error_class"]],
+                                        dtype=torch.long),
+        }
+
+
+def collate_perception(batch):
+    out = {k: torch.stack([b[k] for b in batch]) for k in batch[0]}
+    return out
+
+
+def collate_feasibility(batch):
+    out = {}
+    for k in ("rgb", "action", "arg_type", "success", "error_class"):
+        out[k] = torch.stack([b[k] for b in batch])
+    return out
