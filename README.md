@@ -114,6 +114,19 @@ python phase_d/aggregate.py <runs目录>            # 配对比较 + 显著性
 
 `phase_b/cloud_train.sh`：DINOv2-Base 冻结 + 336px + 宽头 + AMP，同一套代码。
 
+云上数据准备：
+```bash
+# 1) 把数据放到云机（三部分，见"数据"一节），然后设置路径：
+export LIGHTWM_DATA_ROOT=/data/lightwm_data
+export LIGHTWM_COV_ROOT=/data/lightwm_data_cov
+export LIGHTWM_FD_ROOT=/data/fd_benchmark_full_20260811_224644
+# 2) 跑（建议 screen/tmux 挂后台，8-10 小时）：
+bash phase_b/cloud_train.sh
+```
+
+参数对照：本地小档 `--variant small --resolution 224 --width 256`；
+云上大档 `--variant base --resolution 336 --width 384 --amp`。
+
 ## 当前状态（截至 2026-08-25）
 
 | 能力 | 状态 |
