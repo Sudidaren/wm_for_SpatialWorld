@@ -24,6 +24,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
 from spatial_memory import SpatialMemory  # noqa: E402
+from topo_memory import TopoMemory  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Place fingerprint (DINOv2 CLS, frozen)
@@ -108,8 +109,9 @@ class LoopClosure:
     def __init__(self, memory: Optional[SpatialMemory] = None,
                  sim_thr: float = 0.95, min_pose_gap: float = 0.3,
                  min_step_gap: int = 3, keyframe_dist: float = 0.6,
-                 device: str = "cpu"):
+                 device: str = "cpu", topo: Optional[TopoMemory] = None):
         self.mem = memory or SpatialMemory()
+        self.topo = topo or TopoMemory()
         self.off_t = np.zeros(2)
         self.off_yaw = 0.0
         self.places: List[PlaceNode] = []
@@ -142,12 +144,28 @@ class LoopClosure:
         """odom_pos/yaw come from the action-log odometry (drifting)."""
         wpos, wyaw = self.world_pose(odom_pos, odom_yaw)
         self.mem.update(detections, wpos, wyaw, depth, step)
-        if not use_fp or rgb is None:
-            return self.mem.summary(wpos, wyaw)
-        fp = fingerprint(rgb, self.device)
-        self._keyframe(fp, odom_pos, odom_yaw, step)
-        self._close_loop(fp, odom_pos, odom_yaw, step)
+        if use_fp and rgb is not None:
+            fp = fingerprint(rgb, self.device)
+            self._keyframe(fp, odom_pos, odom_yaw, step)
+            self._close_loop(fp, odom_pos, odom_yaw, step)
+        else:
+            self._topo_keyframe(odom_pos, odom_yaw, step)
         return self.mem.summary(wpos, wyaw)
+
+    def _topo_keyframe(self, odom_pos, odom_yaw, step):
+        """Topology-only keyframe (odometry condition, no fingerprint)."""
+        xy = np.array([odom_pos["x"], odom_pos["z"]])
+        if self.places:
+            last = self.places[-1]
+            if np.linalg.norm(xy - last.odom_pos) < self.keyframe_dist and \
+                    abs(step - last.step) < 4:
+                return
+        self.places.append(PlaceNode(np.zeros(1), xy, float(odom_yaw),
+                                     _apply_offset(xy, self.off_t,
+                                                   self.off_yaw),
+                                     float(odom_yaw) + self.off_yaw, step))
+        self.topo.add_place(f"place#{len(self.places)}",
+                            self.places[-1].world_pos, step)
 
     # -- keyframe management ------------------------------------------------
     def _keyframe(self, fp, odom_pos, odom_yaw, step):
@@ -161,6 +179,8 @@ class LoopClosure:
                                      _apply_offset(xy, self.off_t,
                                                    self.off_yaw),
                                      float(odom_yaw) + self.off_yaw, step))
+        self.topo.add_place(f"place#{len(self.places)}",
+                            self.places[-1].world_pos, step)
 
     # -- revisit detection + correction -------------------------------------
     def _close_loop(self, fp, odom_pos, odom_yaw, step):
