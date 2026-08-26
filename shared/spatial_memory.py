@@ -36,10 +36,11 @@ FURNITURE = {
 
 class ObjectAnchor:
     __slots__ = ("oid", "obj_type", "pos", "conf", "n_views", "last_step",
-                 "first_step", "appearance", "states", "height_band")
+                 "first_step", "appearance", "appearances", "uncertainty",
+                 "states", "height_band")
 
     def __init__(self, oid: str, obj_type: str, pos: np.ndarray,
-                 step: int, appearance=None):
+                 step: int, appearance=None, uncertainty: float = 0.5):
         self.oid = oid
         self.obj_type = obj_type
         self.pos = np.asarray(pos, dtype=float)
@@ -48,6 +49,10 @@ class ObjectAnchor:
         self.last_step = step
         self.first_step = step
         self.appearance = appearance
+        self.appearances: List[np.ndarray] = []
+        if appearance is not None:
+            self.appearances.append(np.asarray(appearance, dtype=float))
+        self.uncertainty = uncertainty
         self.states: Dict[str, bool] = {}
         self.height_band = "mid"
 
@@ -96,11 +101,18 @@ class SpatialMemory:
             a.conf = min(MAX_CONF, a.conf + CONF_PER_VIEW)
             a.n_views += 1
             a.last_step = self.step
+            a.uncertainty = max(0.12, a.uncertainty * 0.85)
             if det.get("appearance") is not None:
                 if a.appearance is None:
                     a.appearance = det["appearance"]
                 else:
                     a.appearance = 0.8 * a.appearance + 0.2 * det["appearance"]
+                va = np.asarray(det["appearance"], dtype=float)
+                if len(a.appearances) < 8 and not any(
+                        float(np.dot(va, v) /
+                              (np.linalg.norm(va) * np.linalg.norm(v) + 1e-9))
+                        > 0.95 for v in a.appearances):
+                    a.appearances.append(va)
         return self.summary(agent_pos, yaw, horizon)
 
     def _depth_at(self, depth, uc, vc, bbox) -> Optional[float]:
@@ -124,12 +136,14 @@ class SpatialMemory:
                 continue
             d = float(np.linalg.norm(a.pos - pos))
             if d < best_d:
-                # appearance gate (if available): cosine > 0.7
-                if appearance is not None and a.appearance is not None:
-                    cos = float(np.dot(appearance, a.appearance) /
-                                (np.linalg.norm(appearance) *
-                                 np.linalg.norm(a.appearance) + 1e-9))
-                    if cos < 0.7:
+                # appearance gate (if available): any library view > 0.7
+                if appearance is not None and a.appearances:
+                    va = np.asarray(appearance, dtype=float)
+                    matched = any(
+                        float(np.dot(va, v) /
+                              (np.linalg.norm(va) * np.linalg.norm(v) + 1e-9))
+                        > 0.7 for v in a.appearances)
+                    if not matched:
                         continue
                 best, best_d = key, d
         if best is not None:
@@ -152,6 +166,9 @@ class SpatialMemory:
         if not cands:
             return None
         best = max(cands, key=lambda a: a.conf)
+        # uncertainty grows with time since last observation
+        age = max(0, self.step - best.last_step)
+        u = best.uncertainty + 0.003 * age
         rel, dist, (yaw_d, pitch_d) = rel_direction(
             best.pos, agent_pos, yaw, horizon)
         return {
@@ -165,6 +182,7 @@ class SpatialMemory:
             "direction": self._dir_words(yaw_d, pitch_d),
             "height_band": self._height_band(best.pos[1], pitch_d),
             "confidence": round(best.conf, 2),
+            "uncertainty_m": round(u, 2),
             "n_views": best.n_views,
             "last_step": best.last_step,
         }
