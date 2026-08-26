@@ -200,6 +200,14 @@ class SpatialMemory:
         edges.sort(key=lambda e: -e["conf"])
         return edges[:max_pairs]
 
+    def translate_anchors(self, delta_xy):
+        """Apply a world-frame translation (x, z) to all anchors.  Used by
+        loop closure to re-anchor the whole map after drift correction."""
+        dx, dz = float(delta_xy[0]), float(delta_xy[1])
+        for a in self.anchors.values():
+            a.pos[0] += dx
+            a.pos[2] += dz
+
     def summary(self, agent_pos: dict, yaw: float,
                 horizon: float = 0.0) -> List[Dict]:
         return self.query_all(agent_pos, yaw, horizon)
