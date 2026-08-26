@@ -39,6 +39,61 @@ from model import (  # noqa: E402
 )
 
 
+def eval_dense_sample(model, index, device, n=60, obj_thr=0.4):
+    """Quick detection P/R on held-out frames (for training-time monitoring)."""
+    import dataset as ds_mod
+    from dataset import load_rgb
+    from model import decode_dense
+    type2id = {t: i for i, t in enumerate(index["object_types"])}
+    exclude = {type2id[t] for t in ("Floor", "Wall", "Ceiling", "Window")
+               if t in type2id}
+    frames = [f for f in index["frames"][::97]
+              if f.get("rgb") and not f["rgb"].endswith("/")][:n]
+    tp = fp = fn = 0
+    model.eval()
+    with torch.no_grad():
+        for fr in frames:
+            rgb = torch.from_numpy(load_rgb(fr["rgb"])).permute(2, 0, 1)
+            rgb = rgb.unsqueeze(0).to(device)
+            d = model.dense_detect(rgb)
+            boxes, clss, scores = decode_dense(
+                d["objectness"], d["offset"], d["size"], d["class_logits"],
+                obj_thr=obj_thr, nms_thr=0.5)
+            IMG = ds_mod.IMG_SIZE
+            bx = boxes[0].cpu().numpy() * IMG
+            preds = [(b[0] - b[2] / 2, b[1] - b[3] / 2,
+                      b[0] + b[2] / 2, b[1] + b[3] / 2)
+                     for b in bx if b[2] > 0.01]
+            gts = []
+            for v in fr.get("visible", []) or []:
+                t = type2id.get(v["type"])
+                if t is None or t in exclude or v.get("bbox") is None:
+                    continue
+                b = v["bbox"]
+                sx, sy = IMG / 800.0, IMG / 600.0
+                gts.append((b[0] * sx, b[1] * sy, b[2] * sx, b[3] * sy))
+            used = set()
+            for p in preds:
+                best = max(((iou2(p, g), i) for i, g in enumerate(gts)
+                            if i not in used), default=(0, -1))
+                if best[1] >= 0 and best[0] > 0.5:
+                    tp += 1
+                    used.add(best[1])
+                else:
+                    fp += 1
+            fn += len(gts) - len(used)
+    model.train()
+    return tp / max(tp + fp, 1), tp / max(tp + fn, 1)
+
+
+def iou2(a, b):
+    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    ua = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / max(ua, 1e-9)
+
+
 def focal_loss(logits: torch.Tensor, targets: torch.Tensor, gamma: float = 2.0):
     p = torch.sigmoid(logits)
     pt = torch.where(targets > 0.5, p, 1 - p)
@@ -182,7 +237,7 @@ def train_feasibility(model, loader, epochs, lr, out, device, num_errors,
 
 
 def train_dense(model, loader, epochs, lr, out, device, grid=16,
-                log_every=100, amp=False):
+                log_every=100, amp=False, eval_every=0, index=None):
     params = ([p for p in model.dense_head.parameters()]
               + [p for p in model.dense_obj.parameters()]
               + [p for p in model.dense_off.parameters()]
@@ -231,6 +286,10 @@ def train_dense(model, loader, epochs, lr, out, device, grid=16,
                       f"size={size_loss.item():.3f} cls={cls_loss.item():.3f}")
         avg = tot / max(bi + 1, 1)
         print(f"[dense] epoch {ep} avg_loss={avg:.3f} time={time.time()-t0:.0f}s")
+        if eval_every and (ep + 1) % eval_every == 0 and index is not None:
+            p, r = eval_dense_sample(model, index, device)
+            print(f"  [dense] epoch {ep} val detection: precision={p:.3f} "
+                  f"recall={r:.3f}")
         scheduler.step()
         if avg < best:
             best = avg
@@ -252,6 +311,8 @@ def main():
     ap.add_argument("--resolution", type=int, default=224)
     ap.add_argument("--width", type=int, default=256)
     ap.add_argument("--amp", action="store_true")
+    ap.add_argument("--eval-every", type=int, default=0,
+                    help="eval detection P/R every N epochs (dense task)")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -296,7 +357,8 @@ def main():
                             num_workers=6, collate_fn=collate_perception,
                             pin_memory=True)
         train_dense(model, loader, args.epochs, args.lr, args.out, device,
-                    grid=args.resolution // 14, amp=args.amp)
+                    grid=args.resolution // 14, amp=args.amp,
+                    eval_every=args.eval_every, index=index)
     else:
         ds = FeasibilityDataset(index, limit=args.limit, seed=args.seed)
         loader = DataLoader(ds, batch_size=args.batch, shuffle=True,

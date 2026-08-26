@@ -59,6 +59,10 @@ class PerceptionDataset(Dataset):
         fr = self.frames[i]
         rgb = load_rgb(fr["rgb"])
         depth = load_depth(fr["depth"])
+        flip = bool(np.random.rand() < 0.5)
+        if flip:
+            rgb = np.ascontiguousarray(rgb[:, ::-1, :])
+            depth = np.ascontiguousarray(depth[:, ::-1])
         sx, sy = 1.0 / 800.0, 1.0 / 600.0
         boxes, classes = [], []
         for o in fr["visible"]:
@@ -74,6 +78,8 @@ class PerceptionDataset(Dataset):
             if (x2 - x1) < 2 or (y2 - y1) < 2:   # raw-pixel minimum size
                 continue
             cx = (x1 + x2) / 2 * sx
+            if flip:
+                cx = 1.0 - cx
             cy = (y1 + y2) / 2 * sy
             w = (x2 - x1) * sx
             h = (y2 - y1) * sy

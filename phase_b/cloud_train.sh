@@ -11,7 +11,7 @@ OUT="${OUT:-/home/sudidaren/lightwm_phases/checkpoints}"
 # ---- Dense detector, DINOv2-BASE frozen, 336px, wide head, AMP ----
 "$VENV" -u phase_b/train.py --task dense \
   --variant base --resolution 336 --width 384 --amp \
-  --epochs 10 --batch 16 --lr 5e-4 --out "$OUT"
+  --epochs 12 --batch 16 --lr 5e-4 --eval-every 1 --out "$OUT"
 
 # ---- Depth head (same backbone) ----
 "$VENV" -u phase_b/train.py --task depth \
