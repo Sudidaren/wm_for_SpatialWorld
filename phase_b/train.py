@@ -313,6 +313,8 @@ def main():
     ap.add_argument("--amp", action="store_true")
     ap.add_argument("--eval-every", type=int, default=0,
                     help="eval detection P/R every N epochs (dense task)")
+    ap.add_argument("--class-balanced", action="store_true",
+                    help="class-balanced frame sampling (detection tasks)")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -340,22 +342,19 @@ def main():
     print(f"trainable params: {n_train}")
 
     if args.task == "perception":
-        ds = PerceptionDataset(index, limit=args.limit, seed=args.seed)
-        loader = DataLoader(ds, batch_size=args.batch, shuffle=True,
-                            num_workers=6, collate_fn=collate_perception,
-                            pin_memory=True)
+        ds = PerceptionDataset(index, limit=args.limit, seed=args.seed,
+                               class_balanced=args.class_balanced)
+        loader = _make_loader(ds, args, collate_perception)
         train_perception(model, loader, args.epochs, args.lr, args.out, device)
     elif args.task == "depth":
-        ds = PerceptionDataset(index, limit=args.limit, seed=args.seed)
-        loader = DataLoader(ds, batch_size=args.batch, shuffle=True,
-                            num_workers=6, collate_fn=collate_perception,
-                            pin_memory=True)
+        ds = PerceptionDataset(index, limit=args.limit, seed=args.seed,
+                               class_balanced=args.class_balanced)
+        loader = _make_loader(ds, args, collate_perception)
         train_depth(model, loader, args.epochs, args.lr, args.out, device)
     elif args.task == "dense":
-        ds = PerceptionDataset(index, limit=args.limit, seed=args.seed)
-        loader = DataLoader(ds, batch_size=args.batch, shuffle=True,
-                            num_workers=6, collate_fn=collate_perception,
-                            pin_memory=True)
+        ds = PerceptionDataset(index, limit=args.limit, seed=args.seed,
+                               class_balanced=args.class_balanced)
+        loader = _make_loader(ds, args, collate_perception)
         train_dense(model, loader, args.epochs, args.lr, args.out, device,
                     grid=args.resolution // 14, amp=args.amp,
                     eval_every=args.eval_every, index=index)
@@ -366,6 +365,17 @@ def main():
                             pin_memory=True)
         train_feasibility(model, loader, args.epochs, args.lr, args.out, device,
                           num_errors)
+
+
+def _make_loader(ds, args, collate):
+    from torch.utils.data import WeightedRandomSampler
+    if ds.weights is not None:
+        sampler = WeightedRandomSampler(ds.weights, len(ds.weights),
+                                        replacement=True)
+        return DataLoader(ds, batch_size=args.batch, sampler=sampler,
+                          num_workers=6, collate_fn=collate, pin_memory=True)
+    return DataLoader(ds, batch_size=args.batch, shuffle=True,
+                      num_workers=6, collate_fn=collate, pin_memory=True)
 
 
 if __name__ == "__main__":

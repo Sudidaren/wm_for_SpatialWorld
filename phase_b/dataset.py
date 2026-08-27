@@ -17,6 +17,12 @@ IMG_SIZE = 224
 DEPTH_SIZE = 56
 MAX_BOXES = 30
 EXCLUDE_TYPES = {"Floor", "Wall", "Ceiling", "Window"}
+TASK_TYPES = {
+    "Potato", "Plate", "Microwave", "Egg", "Pan", "KeyChain", "CreditCard",
+    "Box", "Apple", "CellPhone", "Phone", "Tomato", "Bread", "Cup", "Bowl",
+    "Mug", "Kettle", "Pot", "Toaster", "Knife", "ButterKnife", "Spatula",
+    "SaltShaker", "PepperShaker", "SoapBottle", "Bottle",
+}
 
 
 def load_rgb(path: str, size: int = None) -> np.ndarray:
@@ -40,7 +46,8 @@ def has_image(fr: dict) -> bool:
 class PerceptionDataset(Dataset):
     """Frame -> (rgb, gt boxes [cx,cy,w,h], object class ids, depth target)."""
 
-    def __init__(self, index=None, limit: int = 0, seed: int = 0):
+    def __init__(self, index=None, limit: int = 0, seed: int = 0,
+                 class_balanced: bool = False):
         self.index = index if index is not None else load_index()
         frames = self.index["frames"]
         self.types = self.index["object_types"]
@@ -51,6 +58,23 @@ class PerceptionDataset(Dataset):
             rng = np.random.RandomState(seed)
             frames = [frames[i] for i in rng.choice(len(frames), limit, replace=False)]
         self.frames = frames
+        self.weights = None
+        if class_balanced:
+            self.weights = self._frame_weights()
+
+    def _frame_weights(self) -> np.ndarray:
+        """Frames containing task-critical or rare objects get higher
+        sampling weight; furniture-heavy frames get lower weight."""
+        w = np.ones(len(self.frames), dtype=np.float32)
+        for i, fr in enumerate(self.frames):
+            types = [o.get("type") for o in (fr.get("visible", []) or [])]
+            n_task = sum(1 for t in types if t in TASK_TYPES)
+            w[i] += 1.5 * n_task
+            n_furn = sum(1 for t in types if t in
+                         {"Cabinet", "Drawer", "Shelf", "CounterTop",
+                          "StoveBurner", "StoveKnob", "Window", "Chair"})
+            w[i] = max(0.35, w[i] - 0.25 * n_furn)
+        return w
 
     def __len__(self):
         return len(self.frames)
