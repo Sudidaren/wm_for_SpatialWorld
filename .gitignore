@@ -4,4 +4,5 @@ __pycache__/
 .venv/
 checkpoints/
 checkpoints_smoke/
+checkpoints_dq/
 phase_d/configs/
