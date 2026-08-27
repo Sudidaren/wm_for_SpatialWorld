@@ -47,7 +47,7 @@ class PerceptionDataset(Dataset):
     """Frame -> (rgb, gt boxes [cx,cy,w,h], object class ids, depth target)."""
 
     def __init__(self, index=None, limit: int = 0, seed: int = 0,
-                 class_balanced: bool = False):
+                 class_balanced: bool = False, copy_paste: bool = False):
         self.index = index if index is not None else load_index()
         frames = self.index["frames"]
         self.types = self.index["object_types"]
@@ -59,6 +59,8 @@ class PerceptionDataset(Dataset):
             frames = [frames[i] for i in rng.choice(len(frames), limit, replace=False)]
         self.frames = frames
         self.weights = None
+        self.copy_paste = copy_paste
+        self._lib = None
         if class_balanced:
             self.weights = self._frame_weights()
 
@@ -81,26 +83,41 @@ class PerceptionDataset(Dataset):
 
     def __getitem__(self, i: int):
         fr = self.frames[i]
-        rgb = load_rgb(fr["rgb"])
+        with Image.open(fr["rgb"]) as im:
+            rgb_full = np.array(im.convert("RGB"), dtype=np.uint8, copy=True)
         depth = load_depth(fr["depth"])
+        boxes_raw, classes_raw = [], []
+        for o in fr["visible"]:
+            t = self.type2id.get(o["type"])
+            if t is None or t in self.exclude:
+                continue
+            b = o["bbox"]
+            if b is None or b[2] <= b[0] or b[3] <= b[1] or \
+                    (b[2] - b[0]) < 2 or (b[3] - b[1]) < 2:
+                continue
+            boxes_raw.append(list(b))
+            classes_raw.append(t)
+        if self.copy_paste:
+            if self._lib is None:
+                from copy_paste import build_library
+                import os as _os
+                self._lib = build_library(
+                    _os.environ.get("LIGHTWM_DATA_ROOT",
+                                    "/mnt/d/lightwm_data"))
+            import copy_paste as cp
+            rgb_full, boxes_raw, classes_raw = cp.paste_into(
+                rgb_full, boxes_raw, classes_raw, self.type2id, self._lib,
+                np.random.RandomState(np.random.randint(2 ** 31)))
+        rgb = np.asarray(Image.fromarray(rgb_full).resize(
+            (IMG_SIZE, IMG_SIZE)), dtype=np.float32) / 255.0
         flip = bool(np.random.rand() < 0.5)
         if flip:
             rgb = np.ascontiguousarray(rgb[:, ::-1, :])
             depth = np.ascontiguousarray(depth[:, ::-1])
         sx, sy = 1.0 / 800.0, 1.0 / 600.0
         boxes, classes = [], []
-        for o in fr["visible"]:
-            t = self.type2id.get(o["type"])
-            if t is None or t in self.exclude:
-                continue
-            b = o["bbox"]
-            if b is None:
-                continue
+        for b, t in zip(boxes_raw, classes_raw):
             x1, y1, x2, y2 = b
-            if x2 <= x1 or y2 <= y1:
-                continue
-            if (x2 - x1) < 2 or (y2 - y1) < 2:   # raw-pixel minimum size
-                continue
             cx = (x1 + x2) / 2 * sx
             if flip:
                 cx = 1.0 - cx

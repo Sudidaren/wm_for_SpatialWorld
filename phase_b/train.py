@@ -315,6 +315,8 @@ def main():
                     help="eval detection P/R every N epochs (dense task)")
     ap.add_argument("--class-balanced", action="store_true",
                     help="class-balanced frame sampling (detection tasks)")
+    ap.add_argument("--copy-paste", action="store_true",
+                    help="copy-paste augmentation for rare objects (dense)")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -343,7 +345,8 @@ def main():
 
     if args.task == "perception":
         ds = PerceptionDataset(index, limit=args.limit, seed=args.seed,
-                               class_balanced=args.class_balanced)
+                               class_balanced=args.class_balanced,
+                               copy_paste=args.copy_paste)
         loader = _make_loader(ds, args, collate_perception)
         train_perception(model, loader, args.epochs, args.lr, args.out, device)
     elif args.task == "depth":
@@ -353,7 +356,8 @@ def main():
         train_depth(model, loader, args.epochs, args.lr, args.out, device)
     elif args.task == "dense":
         ds = PerceptionDataset(index, limit=args.limit, seed=args.seed,
-                               class_balanced=args.class_balanced)
+                               class_balanced=args.class_balanced,
+                               copy_paste=args.copy_paste)
         loader = _make_loader(ds, args, collate_perception)
         train_dense(model, loader, args.epochs, args.lr, args.out, device,
                     grid=args.resolution // 14, amp=args.amp,

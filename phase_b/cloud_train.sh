@@ -12,7 +12,7 @@ OUT="${OUT:-/home/sudidaren/lightwm_phases/checkpoints}"
 "$VENV" -u phase_b/train.py --task dense \
   --variant base --resolution 336 --width 384 --amp \
   --epochs 12 --batch 16 --lr 5e-4 --eval-every 1 \
-  --class-balanced --out "$OUT"
+  --class-balanced --copy-paste --out "$OUT"
 
 # ---- Depth head (same backbone) ----
 "$VENV" -u phase_b/train.py --task depth \
