@@ -28,10 +28,17 @@ import ai2thor.controller
 sys.path.insert(0, os.path.dirname(__file__))
 from collect_coverage import collect_visible  # noqa: E402
 
-RARE_TARGETS = [
-    "Egg", "KeyChain", "CreditCard", "CellPhone", "Bottle", "Box", "Plate",
-    "Cup", "Mug", "Potato", "Apple", "Tomato", "Bread", "Pan", "Knife",
-    "ButterKnife", "SaltShaker", "PepperShaker", "Spatula",
+SMALL_TARGETS = [
+    "Watch", "CreditCard", "KeyChain", "Pencil", "AluminumFoil", "Egg",
+    "StoveKnob", "Pen", "DishSponge", "Spoon", "SaltShaker", "SoapBar",
+    "Potato", "PepperShaker", "ButterKnife", "Candle", "Spatula", "Fork",
+    "CellPhone", "RemoteControl", "Knife", "PaperTowelRoll", "StoveBurner",
+    "Apple", "Mug", "Ladle", "Tomato", "Plate", "Newspaper", "Plunger",
+    "LightSwitch", "Bottle", "ToiletPaper", "Vase", "ShowerHead",
+    "WateringCan", "Cup", "Lettuce", "TissueBox", "Kettle", "ScrubBrush",
+    "Bowl", "Cloth", "BasketBall", "Pan", "SoapBottle", "ToiletPaperHanger",
+    "Statue", "Book", "Dumbbell", "AlarmClock", "WineBottle", "SprayBottle",
+    "Bread", "SinkBasin", "Faucet",
 ]
 RADII = [1.0, 1.5, 2.0, 2.5]
 Y_CANDS = [0.9, 1.1, 0.5]
@@ -106,7 +113,7 @@ def probe_visible(controller, obj_id: str, op, n_angles: int = 8) -> bool:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--scenes", nargs="+", required=True)
-    ap.add_argument("--objects", nargs="*", default=RARE_TARGETS)
+    ap.add_argument("--objects", nargs="*", default=SMALL_TARGETS)
     ap.add_argument("--angles", type=int, default=8)
     ap.add_argument("--yaws", type=int, default=2)
     ap.add_argument("--horizons", type=int, default=2)

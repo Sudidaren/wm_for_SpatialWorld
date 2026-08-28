@@ -22,10 +22,16 @@ from PIL import Image
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 TARGET_TYPES = {
-    "Egg", "KeyChain", "CreditCard", "Potato", "Apple", "Tomato", "Cup",
-    "Mug", "Bowl", "Bread", "CellPhone", "Plate", "Knife", "ButterKnife",
-    "Spatula", "SaltShaker", "PepperShaker", "SoapBottle", "Bottle",
-    "Kettle", "Pan", "Toaster",
+    "Watch", "CreditCard", "KeyChain", "Pencil", "AluminumFoil", "Egg",
+    "StoveKnob", "Pen", "DishSponge", "Spoon", "SaltShaker", "SoapBar",
+    "Potato", "PepperShaker", "ButterKnife", "Candle", "Spatula", "Fork",
+    "CellPhone", "RemoteControl", "Knife", "PaperTowelRoll", "StoveBurner",
+    "Apple", "Mug", "Ladle", "Tomato", "Plate", "Newspaper", "Plunger",
+    "LightSwitch", "Bottle", "ToiletPaper", "Vase", "ShowerHead",
+    "WateringCan", "Cup", "Lettuce", "TissueBox", "Kettle", "ScrubBrush",
+    "Bowl", "Cloth", "BasketBall", "Pan", "SoapBottle", "ToiletPaperHanger",
+    "Statue", "Book", "Dumbbell", "AlarmClock", "WineBottle", "SprayBottle",
+    "Bread", "SinkBasin", "Faucet", "Microwave", "Toaster", "Box", "Pot",
 }
 MAX_PER_TYPE = 60
 
