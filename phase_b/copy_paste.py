@@ -27,7 +27,7 @@ TARGET_TYPES = {
     "Spatula", "SaltShaker", "PepperShaker", "SoapBottle", "Bottle",
     "Kettle", "Pan", "Toaster",
 }
-MAX_PER_TYPE = 25
+MAX_PER_TYPE = 60
 
 
 def _dominant_mask(seg, b) -> Optional[np.ndarray]:
@@ -50,8 +50,14 @@ def build_library(data_root: str, cache: str =
         with open(cache, "rb") as f:
             return pickle.load(f)
     lib: Dict[str, List[Dict]] = {t: [] for t in TARGET_TYPES}
-    eps = sorted(glob.glob(os.path.join(data_root, "episodes", "*",
-                                        "episode.json")))
+    roots = [data_root]
+    obj_root = os.environ.get("LIGHTWM_OBJVIEW_ROOT",
+                              "/mnt/d/lightwm_data_objviews")
+    if os.path.isdir(obj_root):
+        roots.append(obj_root)
+    eps = sorted({p for r in roots
+                  for p in glob.glob(os.path.join(r, "episodes", "*",
+                                                  "episode.json"))})
     for p in eps:
         d = json.load(open(p))
         ep = os.path.dirname(p)
