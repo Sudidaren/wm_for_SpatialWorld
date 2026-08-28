@@ -79,7 +79,7 @@ def pick_viewpoints(controller, op, n_angles: int, min_sep: float = 0.6
         if d < MIN_RADIUS or d > MAX_RADIUS:
             continue
         cands.append((d, p))
-    cands.sort()
+    cands.sort(key=lambda x: x[0])
     picked = []
     for d, p in cands:
         if all(math.hypot(p["x"] - q["x"], p["z"] - q["z"]) >= min_sep
