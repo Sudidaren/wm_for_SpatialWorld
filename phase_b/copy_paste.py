@@ -56,16 +56,18 @@ def build_library(data_root: str, cache: str =
         with open(cache, "rb") as f:
             return pickle.load(f)
     lib: Dict[str, List[Dict]] = {t: [] for t in TARGET_TYPES}
-    roots = [data_root]
     obj_root = os.environ.get("LIGHTWM_OBJVIEW_ROOT",
                               "/mnt/d/lightwm_data_objviews")
-    if os.path.isdir(obj_root):
-        roots.append(obj_root)
+    roots = ([obj_root] if os.path.isdir(obj_root) else []) + [data_root]
     eps = sorted({p for r in roots
                   for p in glob.glob(os.path.join(r, "episodes", "*",
-                                                  "episode.json"))})
-    for p in eps:
-        d = json.load(open(p))
+                                                  "episode.json"))},
+                 key=lambda p: (os.path.dirname(p).count("objviews") == 0,
+                                p))
+
+    def scan(p, d) -> int:
+        """Extract cutouts from one episode; returns number added."""
+        n_added = 0
         ep = os.path.dirname(p)
         for fr in d.get("frames", []):
             if not fr.get("seg") or not fr.get("rgb"):
@@ -91,8 +93,36 @@ def build_library(data_root: str, cache: str =
                     "h": b[3] - b[1],
                     "area_ratio": (b[2] - b[0]) * (b[3] - b[1]) / (800 * 600),
                 })
-            if all(len(lib[t]) >= MAX_PER_TYPE for t in TARGET_TYPES):
+                n_added += 1
+        return n_added
+
+    # 1) group objviews episodes by focus type, fill each type first
+    by_type: Dict[str, list] = {}
+    data_eps = []
+    for p in eps:
+        try:
+            d = json.load(open(p))
+        except Exception:
+            continue
+        ft = d.get("focus_object_type")
+        if ft in TARGET_TYPES:
+            by_type.setdefault(ft, []).append((p, d))
+        else:
+            data_eps.append((p, d))
+    for t in TARGET_TYPES:
+        for p, d in by_type.get(t, []):
+            scan(p, d)
+            if len(lib[t]) >= MAX_PER_TYPE:
                 break
+    # 2) data episodes fill the remaining gaps (stall-guarded)
+    stall = 0
+    for p, d in data_eps:
+        before = sum(len(lib[t]) for t in TARGET_TYPES)
+        scan(p, d)
+        stall = 0 if sum(len(lib[t]) for t in TARGET_TYPES) > before \
+            else stall + 1
+        if stall >= 5:
+            break
     os.makedirs(os.path.dirname(cache), exist_ok=True)
     with open(cache, "wb") as f:
         pickle.dump(lib, f, protocol=4)
