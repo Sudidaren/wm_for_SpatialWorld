@@ -21,15 +21,16 @@ pip install -U pip
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 pip install transformers numpy pillow tqdm pyyaml scipy huggingface_hub
 
-echo "== 3/4 download data (23GB) =="
+echo "== 3/5 download data (~37GB) =="
 mkdir -p "$DATA_DIR"
 export HF_HUB_ENABLE_HF_TRANSFER=0
 huggingface-cli download "$HF_DATASET" --repo-type=dataset \
   --local-dir "$DATA_DIR"
 
-echo "== 4/4 set paths (add to ~/.bashrc) =="
+echo "== 4/5 set paths (add to ~/.bashrc) =="
 echo "export LIGHTWM_DATA_ROOT=$DATA_DIR/lightwm_data" >> ~/.bashrc
 echo "export LIGHTWM_COV_ROOT=$DATA_DIR/lightwm_data_cov" >> ~/.bashrc
+echo "export LIGHTWM_OBJVIEW_ROOT=$DATA_DIR/lightwm_data_objviews" >> ~/.bashrc
 echo "export LIGHTWM_FD_ROOT=$DATA_DIR/fd_benchmark_full_20260811_224644" >> ~/.bashrc
 echo "export HF_ENDPOINT=$HF_ENDPOINT" >> ~/.bashrc
 

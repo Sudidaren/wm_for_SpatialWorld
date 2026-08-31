@@ -49,6 +49,7 @@ phase_d/  9 任务定义、三组评测配置生成、配对统计
 |---|---|---|
 | `LIGHTWM_DATA_ROOT` | `/mnt/d/lightwm_data` | 原始 34,326 帧（117 场景） |
 | `LIGHTWM_COV_ROOT` | `/mnt/d/lightwm_data_cov` | 穷举覆盖 5,316 帧（12 场景：全位置×4朝向×3俯仰） |
+| `LIGHTWM_OBJVIEW_ROOT` | `/mnt/d/lightwm_data_objviews` | 多角度物体视图 25,719 帧（56 类小物品，89 场景） |
 | `LIGHTWM_FD_ROOT` | `/mnt/d/fd_benchmark_full_20260811_224644` | FD 轨迹 3,618 帧（可行性头） |
 
 目录结构：
