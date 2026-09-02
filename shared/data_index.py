@@ -22,11 +22,14 @@ _DATA_ROOT = os.environ.get("LIGHTWM_DATA_ROOT", "/mnt/d/lightwm_data")
 _COV_ROOT = os.environ.get("LIGHTWM_COV_ROOT", "/mnt/d/lightwm_data_cov")
 _OBJVIEW_ROOT = os.environ.get("LIGHTWM_OBJVIEW_ROOT",
                                "/mnt/d/lightwm_data_objviews")
+_PROCTHOR_ROOT = os.environ.get("LIGHTWM_PROCTHOR_ROOT",
+                                "/mnt/d/lightwm_data_procthor")
 
 EPISODES_GLOBS = [
     os.path.join(_DATA_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_COV_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_OBJVIEW_ROOT, "episodes", "*", "episode.json"),
+    os.path.join(_PROCTHOR_ROOT, "episodes", "*", "episode.json"),
 ]
 SCENE_GT_GLOBS = [
     os.path.join(_DATA_ROOT, "scene_gt", "*.json"),
