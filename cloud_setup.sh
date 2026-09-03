@@ -4,6 +4,9 @@
 set -euo pipefail
 
 export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+# Force mirror HTTP downloads (xet bypasses HF_ENDPOINT and hits slow US CDN)
+export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"
+export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-120}"
 REPO_URL="${REPO_URL:-git@github.com:Sudidaren/wm_for_SpatialWorld.git}"
 HF_DATASET="${HF_DATASET:-Sudidaren/lightwm-data}"
 DATA_DIR="${DATA_DIR:-/data/lightwm}"
