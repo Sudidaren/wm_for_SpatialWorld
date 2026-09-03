@@ -52,9 +52,12 @@ from huggingface_hub import hf_hub_download, list_repo_tree, HfApi
 data_dir, repo = sys.argv[1], sys.argv[2]
 os.makedirs(data_dir, exist_ok=True)
 targets = [
-    ("tarballs/lightwm_data_episodes.tar", data_dir),
-    ("tarballs/lightwm_data_cov_episodes.tar", data_dir),
-    ("tarballs/lightwm_data_objviews_episodes.tar", data_dir),
+    ("tarballs/lightwm_data_episodes.tar",
+     os.path.join(data_dir, "lightwm_data")),
+    ("tarballs/lightwm_data_cov_episodes.tar",
+     os.path.join(data_dir, "lightwm_data_cov")),
+    ("tarballs/lightwm_data_objviews_episodes.tar",
+     os.path.join(data_dir, "lightwm_data_objviews")),
     ("tarballs/fd_ai2thor.tar",
      os.path.join(data_dir, "fd_benchmark_full_20260811_224644")),
     ("tarballs/lightwm_data_procthor.tar", data_dir),
