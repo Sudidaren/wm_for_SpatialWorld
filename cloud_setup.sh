@@ -7,6 +7,7 @@ export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 REPO_URL="${REPO_URL:-git@github.com:Sudidaren/wm_for_SpatialWorld.git}"
 HF_DATASET="${HF_DATASET:-Sudidaren/lightwm-data}"
 DATA_DIR="${DATA_DIR:-/data/lightwm}"
+SYS_VENV="${SYS_VENV:-0}"   # 1 = reuse the machine's preinstalled torch
 
 echo "== 1/4 clone code =="
 if [ ! -d lightwm_phases ]; then
@@ -17,43 +18,48 @@ cd lightwm_phases
 echo "== 2/4 python env =="
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -U pip
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+if [ "$SYS_VENV" = "1" ]; then
+  python3 -m venv --system-site-packages .venv
+  source .venv/bin/activate
+  if python -c "import torch, torchvision" 2>/dev/null; then
+    echo "reusing system torch/torchvision (SYS_VENV=1)"
+  else
+    echo "no system torch found; installing cu128 wheels"
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+  fi
+else
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install -U pip
+  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+fi
 pip install transformers numpy pillow tqdm pyyaml scipy huggingface_hub
 
-echo "== 3/5 download data (~40GB) =="
+echo "== 3/5 download data (~40GB, streamed tar-by-tar) =="
 python3 - "$DATA_DIR" "$HF_DATASET" <<'PYEOF'
-import os, sys, tarfile, shutil
+import os, sys, shutil, tarfile
 from huggingface_hub import hf_hub_download, list_repo_tree, HfApi
 
 data_dir, repo = sys.argv[1], sys.argv[2]
 os.makedirs(data_dir, exist_ok=True)
-tars = [
-    "tarballs/lightwm_data_episodes.tar",
-    "tarballs/lightwm_data_cov_episodes.tar",
-    "tarballs/lightwm_data_objviews_episodes.tar",
-    "tarballs/fd_ai2thor.tar",
-    "tarballs/lightwm_data_procthor.tar",
-    "tarballs/lightwm_data_virtualhome.tar",
+targets = [
+    ("tarballs/lightwm_data_episodes.tar", data_dir),
+    ("tarballs/lightwm_data_cov_episodes.tar", data_dir),
+    ("tarballs/lightwm_data_objviews_episodes.tar", data_dir),
+    ("tarballs/fd_ai2thor.tar",
+     os.path.join(data_dir, "fd_benchmark_full_20260811_224644")),
+    ("tarballs/lightwm_data_procthor.tar", data_dir),
+    ("tarballs/lightwm_data_virtualhome.tar", data_dir),
 ]
-for t in tars:
-    p = hf_hub_download(repo, t, repo_type="dataset",
+for tar_rel, dest in targets:
+    p = hf_hub_download(repo, tar_rel, repo_type="dataset",
                         local_dir=os.path.join(data_dir, "dl"))
-    print("downloaded", t, flush=True)
-
-def extract(tar_rel, dest):
-    p = os.path.join(data_dir, "dl", tar_rel)
+    print("downloaded", tar_rel, flush=True)
     os.makedirs(dest, exist_ok=True)
     with tarfile.open(p) as tf:
         tf.extractall(dest)
-
-extract(tars[0], data_dir)                                  # lightwm_data/episodes
-extract(tars[1], data_dir)                                  # lightwm_data_cov/episodes
-extract(tars[2], data_dir)                                  # lightwm_data_objviews/episodes
-fd_dest = os.path.join(data_dir, "fd_benchmark_full_20260811_224644")
-extract(tars[3], fd_dest)                                   # fd/ai2thor
-extract(tars[4], data_dir)  # lightwm_data_procthor (episodes + manifest)
-extract(tars[5], data_dir)  # lightwm_data_virtualhome (episodes + scene_gt)
+    os.remove(p)
+    print("extracted", tar_rel, flush=True)
 
 # scene_gt + manifests (small files, download directly)
 api = HfApi()
