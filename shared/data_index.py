@@ -38,7 +38,11 @@ SCENE_GT_GLOBS = [
     os.path.join(_DATA_ROOT, "scene_gt", "*.json"),
     os.path.join(_COV_ROOT, "scene_gt", "*.json"),
 ]
-DEFAULT_INDEX = "/home/sudidaren/lightwm_phases/data/frame_index.pkl"
+DEFAULT_INDEX = os.environ.get(
+    "LIGHTWM_INDEX",
+    os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "..", "data", "frame_index.pkl")),
+)
 
 _ERROR_RULES = [
     ("hand_occupied", ["hand already has an object", "hand is already holding"]),

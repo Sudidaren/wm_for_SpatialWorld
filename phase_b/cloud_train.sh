@@ -7,11 +7,15 @@ set -euo pipefail
 export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$HERE")"
+cd "$REPO_ROOT"
 VENV="${VENV:-$REPO_ROOT/.venv/bin/python}"
 OUT="${OUT:-$REPO_ROOT/checkpoints}"
 RES="${RES:-336}"          # 336 (4090) or 448 (A100, best for small objects)
 EPOCHS="${EPOCHS:-12}"
 BATCH="${BATCH:-16}"       # 448px: use 8 on 24GB
+
+echo "== 0/5 rebuild frame index =="
+"$VENV" -u shared/data_index.py
 
 # ---- Dense detector, DINOv2-BASE frozen, 336px, wide head, AMP ----
 "$VENV" -u phase_b/train.py --task dense \
