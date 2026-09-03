@@ -51,6 +51,8 @@ phase_d/  9 任务定义、三组评测配置生成、配对统计
 | `LIGHTWM_COV_ROOT` | `/mnt/d/lightwm_data_cov` | 穷举覆盖 5,316 帧（12 场景：全位置×4朝向×3俯仰） |
 | `LIGHTWM_OBJVIEW_ROOT` | `/mnt/d/lightwm_data_objviews` | 多角度物体视图 25,719 帧（56 类小物品，89 场景） |
 | `LIGHTWM_FD_ROOT` | `/mnt/d/fd_benchmark_full_20260811_224644` | FD 轨迹 3,618 帧（可行性头） |
+| `LIGHTWM_PROCTHOR_ROOT` | `/mnt/d/lightwm_data_procthor` | ProcTHOR 家庭 7,224 帧（5 房全覆盖） |
+| `LIGHTWM_VIRTUALHOME_ROOT` | `/mnt/d/lightwm_data_virtualhome` | VirtualHome 家庭 900 帧（10 公寓，RGB+类别分割，无米制深度；类别经映射进 117 类词表，仅用于 dense/域增强） |
 
 目录结构：
 ```

@@ -47,13 +47,16 @@ class PerceptionDataset(Dataset):
     """Frame -> (rgb, gt boxes [cx,cy,w,h], object class ids, depth target)."""
 
     def __init__(self, index=None, limit: int = 0, seed: int = 0,
-                 class_balanced: bool = False, copy_paste: bool = False):
+                 class_balanced: bool = False, copy_paste: bool = False,
+                 require_depth: bool = False):
         self.index = index if index is not None else load_index()
         frames = self.index["frames"]
         self.types = self.index["object_types"]
         self.type2id = {t: i for i, t in enumerate(self.types)}
         self.exclude = {self.type2id[t] for t in EXCLUDE_TYPES if t in self.type2id}
         frames = [f for f in frames if has_image(f)]
+        if require_depth:
+            frames = [f for f in frames if f.get("depth")]
         if limit:
             rng = np.random.RandomState(seed)
             frames = [frames[i] for i in rng.choice(len(frames), limit, replace=False)]
@@ -85,7 +88,8 @@ class PerceptionDataset(Dataset):
         fr = self.frames[i]
         with Image.open(fr["rgb"]) as im:
             rgb_full = np.array(im.convert("RGB"), dtype=np.uint8, copy=True)
-        depth = load_depth(fr["depth"])
+        depth = (load_depth(fr["depth"]) if fr.get("depth")
+                 else np.zeros((DEPTH_SIZE, DEPTH_SIZE), dtype=np.float32))
         boxes_raw, classes_raw = [], []
         for o in fr["visible"]:
             t = self.type2id.get(o["type"])

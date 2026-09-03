@@ -351,7 +351,8 @@ def main():
         train_perception(model, loader, args.epochs, args.lr, args.out, device)
     elif args.task == "depth":
         ds = PerceptionDataset(index, limit=args.limit, seed=args.seed,
-                               class_balanced=args.class_balanced)
+                               class_balanced=args.class_balanced,
+                               require_depth=True)
         loader = _make_loader(ds, args, collate_perception)
         train_depth(model, loader, args.epochs, args.lr, args.out, device)
     elif args.task == "dense":

@@ -24,12 +24,15 @@ _OBJVIEW_ROOT = os.environ.get("LIGHTWM_OBJVIEW_ROOT",
                                "/mnt/d/lightwm_data_objviews")
 _PROCTHOR_ROOT = os.environ.get("LIGHTWM_PROCTHOR_ROOT",
                                 "/mnt/d/lightwm_data_procthor")
+_VIRTUALHOME_ROOT = os.environ.get(
+    "LIGHTWM_VIRTUALHOME_ROOT", "/mnt/d/lightwm_data_virtualhome")
 
 EPISODES_GLOBS = [
     os.path.join(_DATA_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_COV_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_OBJVIEW_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_PROCTHOR_ROOT, "episodes", "*", "episode.json"),
+    os.path.join(_VIRTUALHOME_ROOT, "episodes", "*", "episode.json"),
 ]
 SCENE_GT_GLOBS = [
     os.path.join(_DATA_ROOT, "scene_gt", "*.json"),
@@ -76,6 +79,60 @@ def is_procthor_scene(scene: str) -> bool:
     return str(scene or "").startswith("procthor")
 
 
+def is_virtualhome_scene(scene: str) -> bool:
+    return str(scene or "").startswith("virtualhome")
+
+
+# VirtualHome class names (lowercase tokens, e.g. 'kitchencabinet') mapped to
+# the closest canonical AI2-THOR class where the mapping is high-confidence.
+# Anything absent from this table is a VirtualHome-only asset that cannot be
+# labeled with the 117-class AI2-THOR vocabulary and is dropped for detection.
+VH_AI2_MAP = {
+    "apple": "Apple",
+    "barsoap": "SoapBar",
+    "bed": "Bed",
+    "book": "Book",
+    "bookshelf": "Shelf",
+    "box": "Box",
+    "candle": "Candle",
+    "cellphone": "CellPhone",
+    "chair": "Chair",
+    "coffeetable": "CoffeeTable",
+    "cookingpot": "Pot",
+    "cup": "Cup",
+    "curtains": "Curtains",
+    "cutleryfork": "Fork",
+    "cutleryknife": "Knife",
+    "desk": "Desk",
+    "dishbowl": "Bowl",
+    "fridge": "Fridge",
+    "garbagecan": "GarbageCan",
+    "kitchencabinet": "Cabinet",
+    "kitchencounter": "CounterTop",
+    "kitchentable": "DiningTable",
+    "lightswitch": "LightSwitch",
+    "microwave": "Microwave",
+    "mug": "Mug",
+    "nightstand": "SideTable",
+    "pillow": "Pillow",
+    "plate": "Plate",
+    "sink": "Sink",
+    "sofa": "Sofa",
+    "toaster": "Toaster",
+    "toiletpaper": "ToiletPaper",
+    "towel": "Towel",
+    "tv": "Television",
+    "tvstand": "TVStand",
+    "vase": "Vase",
+    "wallshelf": "Shelf",
+    "waterglass": "Cup",
+}
+
+
+def virtualhome_type(name: str) -> str:
+    return VH_AI2_MAP.get((name or "").strip().lower(), "")
+
+
 def _load_episode(path: str) -> Dict:
     with open(path) as f:
         return json.load(f)
@@ -92,7 +149,8 @@ def build_index(out_path: str = DEFAULT_INDEX) -> Dict[str, Any]:
             d = _load_episode(ep_path)
         except Exception:
             continue
-        if is_procthor_scene(d.get("scene", "")):
+        if is_procthor_scene(d.get("scene", "")) or \
+                is_virtualhome_scene(d.get("scene", "")):
             continue
         for f in d.get("frames", []):
             if not f.get("rgb"):
@@ -115,13 +173,15 @@ def build_index(out_path: str = DEFAULT_INDEX) -> Dict[str, Any]:
             continue
         seen_episodes.add(ep_name)
         scene = d.get("scene", "")
+        vh = is_virtualhome_scene(scene)
         mode = d.get("mode", "")
         for f in d.get("frames", []):
             if not f.get("rgb"):
                 continue
             vis = []
             for o in f.get("visible_objects", []):
-                t = canonical_type(o.get("name", ""))
+                t = virtualhome_type(o.get("name", "")) if vh \
+                    else canonical_type(o.get("name", ""))
                 if t in vocab:
                     type_counts[t] = type_counts.get(t, 0) + 1
                 vis.append({
@@ -134,6 +194,7 @@ def build_index(out_path: str = DEFAULT_INDEX) -> Dict[str, Any]:
             action_counts[aname] = action_counts.get(aname, 0) + 1
             err = classify_error(f.get("error_message"))
             err_counts[err] = err_counts.get(err, 0) + 1
+            depth_rel = f.get("depth") or ""
             ag = f.get("agent") or {}
             frames.append({
                 "episode": ep_name,
@@ -141,7 +202,8 @@ def build_index(out_path: str = DEFAULT_INDEX) -> Dict[str, Any]:
                 "mode": mode,
                 "step": f.get("step"),
                 "rgb": os.path.join(os.path.dirname(ep_path), f.get("rgb", "")),
-                "depth": os.path.join(os.path.dirname(ep_path), f.get("depth", "")),
+                "depth": (os.path.join(os.path.dirname(ep_path), depth_rel)
+                          if depth_rel else ""),
                 "seg": os.path.join(os.path.dirname(ep_path), f.get("seg", "")),
                 "action": aname,
                 "action_args": act.get("args", {}) or {},
