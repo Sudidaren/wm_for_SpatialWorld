@@ -21,7 +21,7 @@ pip install -U pip
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 pip install transformers numpy pillow tqdm pyyaml scipy huggingface_hub
 
-echo "== 3/5 download data (~37GB) =="
+echo "== 3/5 download data (~40GB) =="
 python3 - "$DATA_DIR" "$HF_DATASET" <<'PYEOF'
 import os, sys, tarfile, shutil
 from huggingface_hub import hf_hub_download, list_repo_tree, HfApi
@@ -33,6 +33,8 @@ tars = [
     "tarballs/lightwm_data_cov_episodes.tar",
     "tarballs/lightwm_data_objviews_episodes.tar",
     "tarballs/fd_ai2thor.tar",
+    "tarballs/lightwm_data_procthor.tar",
+    "tarballs/lightwm_data_virtualhome.tar",
 ]
 for t in tars:
     p = hf_hub_download(repo, t, repo_type="dataset",
@@ -50,6 +52,8 @@ extract(tars[1], data_dir)                                  # lightwm_data_cov/e
 extract(tars[2], data_dir)                                  # lightwm_data_objviews/episodes
 fd_dest = os.path.join(data_dir, "fd_benchmark_full_20260811_224644")
 extract(tars[3], fd_dest)                                   # fd/ai2thor
+extract(tars[4], data_dir)  # lightwm_data_procthor (episodes + manifest)
+extract(tars[5], data_dir)  # lightwm_data_virtualhome (episodes + scene_gt)
 
 # scene_gt + manifests (small files, download directly)
 api = HfApi()
@@ -70,6 +74,8 @@ echo "export LIGHTWM_DATA_ROOT=$DATA_DIR/lightwm_data" >> ~/.bashrc
 echo "export LIGHTWM_COV_ROOT=$DATA_DIR/lightwm_data_cov" >> ~/.bashrc
 echo "export LIGHTWM_OBJVIEW_ROOT=$DATA_DIR/lightwm_data_objviews" >> ~/.bashrc
 echo "export LIGHTWM_FD_ROOT=$DATA_DIR/fd_benchmark_full_20260811_224644" >> ~/.bashrc
+echo "export LIGHTWM_PROCTHOR_ROOT=$DATA_DIR/lightwm_data_procthor" >> ~/.bashrc
+echo "export LIGHTWM_VIRTUALHOME_ROOT=$DATA_DIR/lightwm_data_virtualhome" >> ~/.bashrc
 echo "export HF_ENDPOINT=$HF_ENDPOINT" >> ~/.bashrc
 
 echo ""
