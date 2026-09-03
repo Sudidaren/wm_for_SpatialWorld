@@ -51,8 +51,11 @@ def collect_visible(event) -> list:
         if not mo:
             continue  # non-interactable asset objects (walls, doors, lights)
         name = mo.get("name", oid)
-        otype = mo.get("objectType") or (name.split("_")[0]
-                                         if "_" in name else name)
+        # AI2-THOR exposes objectType; ProcTHOR exposes 'type' with the
+        # canonical class ('Television', 'Wall', ...).  Prefer those over
+        # deriving from instance names ('Television|6|2|1').
+        otype = (mo.get("objectType") or mo.get("type")
+                 or (name.split("_")[0] if "_" in name else name))
         out.append({
             "objectId": oid,
             "name": name,

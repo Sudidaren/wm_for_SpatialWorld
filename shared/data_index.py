@@ -54,8 +54,26 @@ def classify_error(err: Optional[str]) -> str:
     return "other" if e else "none"
 
 
-def base_type(name: str) -> str:
-    return name.split("_")[0] if "_" in name else name
+def canonical_type(name: str) -> str:
+    """Map a simulator object name/type to the canonical AI2-THOR class.
+
+    - old AI2-THOR collectors saved names like 'Cabinet_78f721d5';
+    - ProcTHOR instance names embed room/parent ids: 'Television|6|2|1',
+      'Potato|surface|2|23', and duplicate markers like 'Drawer (3)'.
+    All of those must reduce to the canonical class ('Cabinet',
+    'Television', 'Potato', 'Drawer', ...) so the 117-class vocabulary
+    stays stable and wall/door/room fragments never become classes.
+    """
+    n = re.sub(r"\s*\(\d+\)\s*$", "", (name or "").strip())
+    if "|" in n:
+        return n.split("|", 1)[0]
+    if "_" in n:
+        return n.split("_", 1)[0]
+    return n
+
+
+def is_procthor_scene(scene: str) -> bool:
+    return str(scene or "").startswith("procthor")
 
 
 def _load_episode(path: str) -> Dict:
@@ -65,6 +83,22 @@ def _load_episode(path: str) -> Dict:
 
 def build_index(out_path: str = DEFAULT_INDEX) -> Dict[str, Any]:
     episodes = sorted({p for g in EPISODES_GLOBS for p in glob.glob(g)})
+    # Canonical vocabulary = classes seen in the non-ProcTHOR (AI2-THOR)
+    # data.  ProcTHOR reuses the same asset classes, so anything outside
+    # this set (wall/door/room fragments, instance suffixes) is not a class.
+    vocab: set[str] = set()
+    for ep_path in episodes:
+        try:
+            d = _load_episode(ep_path)
+        except Exception:
+            continue
+        if is_procthor_scene(d.get("scene", "")):
+            continue
+        for f in d.get("frames", []):
+            if not f.get("rgb"):
+                continue
+            for o in f.get("visible_objects", []):
+                vocab.add(canonical_type(o.get("name", "")))
     frames: List[Dict] = []
     type_counts: Dict[str, int] = {}
     action_counts: Dict[str, int] = {}
@@ -87,8 +121,9 @@ def build_index(out_path: str = DEFAULT_INDEX) -> Dict[str, Any]:
                 continue
             vis = []
             for o in f.get("visible_objects", []):
-                t = base_type(o.get("name", ""))
-                type_counts[t] = type_counts.get(t, 0) + 1
+                t = canonical_type(o.get("name", ""))
+                if t in vocab:
+                    type_counts[t] = type_counts.get(t, 0) + 1
                 vis.append({
                     "name": o.get("name", ""),
                     "type": t,
@@ -131,7 +166,7 @@ def build_index(out_path: str = DEFAULT_INDEX) -> Dict[str, Any]:
             o["name"]: o["position"] for o in g.get("objects", [])
         }
 
-    types = sorted(type_counts)
+    types = sorted(vocab)
     actions = sorted(action_counts)
     errors = sorted(err_counts)
     index = {
