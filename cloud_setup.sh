@@ -10,16 +10,22 @@ DATA_DIR="${DATA_DIR:-/data/lightwm}"
 SYS_VENV="${SYS_VENV:-0}"   # 1 = reuse the machine's preinstalled torch
 
 echo "== 1/4 clone code =="
-if [ ! -d lightwm_phases ]; then
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/README.md" ] && [ -f "$SCRIPT_DIR/cloud_setup.sh" ]; then
+  # running from inside the extracted repo (e.g. tar archive, no .git)
+  echo "repo already present: $SCRIPT_DIR"
+  cd "$SCRIPT_DIR"
+elif [ -f "$PWD/lightwm_phases/README.md" ]; then
+  echo "repo already present: $PWD/lightwm_phases"
+  cd lightwm_phases
+else
   git clone "$REPO_URL" lightwm_phases
+  cd lightwm_phases
 fi
-cd lightwm_phases
 
 echo "== 2/4 python env =="
-python3 -m venv .venv
-source .venv/bin/activate
 if [ "$SYS_VENV" = "1" ]; then
-  python3 -m venv --system-site-packages .venv
+  [ -d .venv ] || python3 -m venv --system-site-packages .venv
   source .venv/bin/activate
   if python -c "import torch, torchvision" 2>/dev/null; then
     echo "reusing system torch/torchvision (SYS_VENV=1)"
@@ -28,7 +34,7 @@ if [ "$SYS_VENV" = "1" ]; then
     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
   fi
 else
-  python3 -m venv .venv
+  [ -d .venv ] || python3 -m venv .venv
   source .venv/bin/activate
   pip install -U pip
   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
