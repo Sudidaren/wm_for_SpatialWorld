@@ -12,11 +12,14 @@ import torch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
 
+import dataset as ds_mod  # noqa: E402
 from dataset import FeasibilityDataset, collate_feasibility, load_rgb  # noqa
 from model import PerceptionModel  # noqa: E402
 
 
-def main(ckpt: str, n: int = 800):
+def main(ckpt: str, n: int = 800, variant: str = "small",
+         resolution: int = 224, device: str = "cuda"):
+    ds_mod.IMG_SIZE = resolution
     from shared.data_index import load_index
     index = load_index()
     ds = FeasibilityDataset(index, use_fd=True)
@@ -25,8 +28,10 @@ def main(ckpt: str, n: int = 800):
     model = PerceptionModel(num_types=len(index["object_types"]),
                             num_actions=len(index["actions"]),
                             num_errors=len(index["error_classes"]),
-                            device="cpu").cuda()
-    state = torch.load(ckpt, map_location="cuda")
+                            device="cpu", img_size=resolution,
+                            dinov2_name=("dinov2_vits14" if variant == "small"
+                                         else "dinov2_vitb14")).to(device)
+    state = torch.load(ckpt, map_location=device)
     cur = model.state_dict()
     filt = {k: v for k, v in state.items()
             if k in cur and cur[k].shape == v.shape}
@@ -62,5 +67,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt",
                     default="/home/sudidaren/lightwm_phases/checkpoints/feasibility_best.pt")
+    ap.add_argument("--n", type=int, default=800)
+    ap.add_argument("--variant", choices=["small", "base"], default="small")
+    ap.add_argument("--resolution", type=int, default=224)
+    ap.add_argument("--device", default="cuda")
     args = ap.parse_args()
-    main(args.ckpt)
+    main(args.ckpt, n=args.n, variant=args.variant,
+         resolution=args.resolution, device=args.device)

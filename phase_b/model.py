@@ -20,6 +20,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+OBJ_SUP_THR = 0.3   # supervise offset/size/class on cells with obj target above this
+IMG_MEAN = (0.485, 0.456, 0.406)
+IMG_STD = (0.229, 0.224, 0.225)
+
 
 def build_dinov2(name: str = "dinov2_vits14", device="cpu"):
     """Load DINOv2 via transformers (weights from HF mirror when needed).
@@ -86,6 +90,14 @@ class PerceptionModel(nn.Module):
         self.encoder, enc_dim, self.patch = build_dinov2(
             dinov2_name, device)
         self.grid = img_size // self.patch
+        self.register_buffer(
+            "img_mean",
+            torch.tensor(IMG_MEAN).view(1, 3, 1, 1),
+            persistent=False)
+        self.register_buffer(
+            "img_std",
+            torch.tensor(IMG_STD).view(1, 3, 1, 1),
+            persistent=False)
         hw = head_width
         self.adapter = nn.Sequential(
             nn.Conv2d(enc_dim, hw, 1), nn.ReLU(), nn.Conv2d(hw, hw, 1))
@@ -122,6 +134,8 @@ class PerceptionModel(nn.Module):
     def _patch_features(self, rgb: torch.Tensor):
         """Return (patch_feats (B,D,g,g), cls_token (B,enc_dim))."""
         with torch.no_grad():
+            # Frozen DINOv2 expects ImageNet-style normalized inputs.
+            rgb = (rgb - self.img_mean) / self.img_std
             out = self.encoder(pixel_values=rgb).last_hidden_state
         cls = out[:, 0]
         patches = out[:, 1:]  # (B, g*g, enc_dim)
@@ -275,8 +289,13 @@ def giou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
 
 def dense_targets(boxes: torch.Tensor, classes: torch.Tensor,
                   num_boxes: torch.Tensor, grid: int = 16,
-                  device="cpu", gauss_sigma: float = 0.8):
-    """Convert normalized boxes (in [0,1] image coords) to dense 16x16 targets.
+                  device="cpu", gauss_sigma: float = 0.8,
+                  sup_thr: float = OBJ_SUP_THR):
+    """Convert normalized boxes (in [0,1] image coords) to dense gxg targets.
+
+    Objectness gets a Gaussian blob around each object center; offset / size /
+    class are supervised on every cell of the blob above ``sup_thr`` so that
+    decoding does not rely on garbage predictions from unsupervised halo cells.
     Returns (obj_map (B,1,g,g), off_map (B,2,g,g), size_map (B,2,g,g),
     cls_map (B,g,g) as long, num_pos (B,))."""
     B, S, _ = boxes.shape
@@ -299,23 +318,30 @@ def dense_targets(boxes: torch.Tensor, classes: torch.Tensor,
             blob = torch.exp(-((xx - gx) ** 2 + (yy - gy) ** 2) /
                              (2 * gauss_sigma ** 2))
             obj[b, 0] = torch.maximum(obj[b, 0], blob)
-            px = min(int(gx), grid - 1)
-            py = min(int(gy), grid - 1)
-            off[b, 0, py, px] = gx - px - 0.5
-            off[b, 1, py, px] = gy - py - 0.5
-            size[b, 0, py, px] = w
-            size[b, 1, py, px] = h
-            cls_map[b, py, px] = classes[b, s]
-            num_pos[b] += 1
+            sup = blob > sup_thr
+            if sup.any():
+                ys, xs = torch.nonzero(sup, as_tuple=True)
+                off[b, 0, ys, xs] = gx - (xs.float() + 0.5)
+                off[b, 1, ys, xs] = gy - (ys.float() + 0.5)
+                size[b, 0, ys, xs] = w
+                size[b, 1, ys, xs] = h
+                cls_map[b, ys, xs] = classes[b, s]
+                num_pos[b] += sup.sum()
     return obj, off, size, cls_map, num_pos
 
 
-def decode_dense(obj_map, off_map, size_map, cls_logits, grid: int = 16,
+def decode_dense(obj_map, off_map, size_map, cls_logits,
+                 grid: Optional[int] = None,
                  img_size: int = 224, obj_thr: float = 0.4,
                  nms_thr: float = 0.5, max_det: int = 30):
     """Decode dense outputs to (B, max_det, 4) boxes in [0,1] normalized
-    image coords + class ids, with NMS."""
+    image coords + class ids, with NMS.
+
+    ``grid`` defaults to the spatial size of ``obj_map`` (16 for 224px
+    small-variant, 24 for 336px base-variant)."""
     B = obj_map.shape[0]
+    if grid is None:
+        grid = obj_map.shape[-1]
     out_boxes = torch.zeros(B, max_det, 4, device=obj_map.device)
     out_cls = torch.zeros(B, max_det, dtype=torch.long, device=obj_map.device)
     out_score = torch.zeros(B, max_det, device=obj_map.device)

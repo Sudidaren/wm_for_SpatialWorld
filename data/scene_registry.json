@@ -1,0 +1,2229 @@
+{
+ "scenes": {
+  "FloorPlan1": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 504
+    },
+    "lightwm_data": {
+     "episodes": 5,
+     "frames": 330
+    },
+    "objviews": {
+     "episodes": 26,
+     "frames": 626
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 32,
+   "frames": 1460
+  },
+  "FloorPlan10": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 756
+    },
+    "lightwm_data": {
+     "episodes": 5,
+     "frames": 330
+    },
+    "objviews": {
+     "episodes": 28,
+     "frames": 641
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 34,
+   "frames": 1727
+  },
+  "FloorPlan11": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 50
+    },
+    "lightwm_data": {
+     "episodes": 11,
+     "frames": 383
+    },
+    "objviews": {
+     "episodes": 25,
+     "frames": 573
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 41,
+   "frames": 1006
+  },
+  "FloorPlan12": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 276
+    },
+    "fd": {
+     "episodes": 5,
+     "frames": 60
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 393
+    },
+    "objviews": {
+     "episodes": 19,
+     "frames": 419
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 40,
+   "frames": 1148
+  },
+  "FloorPlan13": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 33
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 378
+    },
+    "objviews": {
+     "episodes": 29,
+     "frames": 675
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 46,
+   "frames": 1086
+  },
+  "FloorPlan14": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 65
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 376
+    },
+    "objviews": {
+     "episodes": 24,
+     "frames": 529
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 44,
+   "frames": 970
+  },
+  "FloorPlan15": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 9,
+     "frames": 110
+    },
+    "lightwm_data": {
+     "episodes": 23,
+     "frames": 488
+    },
+    "objviews": {
+     "episodes": 22,
+     "frames": 538
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 54,
+   "frames": 1136
+  },
+  "FloorPlan16": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 52
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 391
+    },
+    "objviews": {
+     "episodes": 28,
+     "frames": 736
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 45,
+   "frames": 1179
+  },
+  "FloorPlan17": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 300
+    },
+    "fd": {
+     "episodes": 6,
+     "frames": 50
+    },
+    "lightwm_data": {
+     "episodes": 17,
+     "frames": 382
+    },
+    "objviews": {
+     "episodes": 27,
+     "frames": 598
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 51,
+   "frames": 1330
+  },
+  "FloorPlan18": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 2,
+     "frames": 16
+    },
+    "lightwm_data": {
+     "episodes": 9,
+     "frames": 352
+    },
+    "objviews": {
+     "episodes": 25,
+     "frames": 654
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 36,
+   "frames": 1022
+  },
+  "FloorPlan19": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "lightwm_data": {
+     "episodes": 5,
+     "frames": 330
+    },
+    "objviews": {
+     "episodes": 23,
+     "frames": 533
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 28,
+   "frames": 863
+  },
+  "FloorPlan2": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 672
+    },
+    "lightwm_data": {
+     "episodes": 5,
+     "frames": 330
+    },
+    "objviews": {
+     "episodes": 5,
+     "frames": 111
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 11,
+   "frames": 1113
+  },
+  "FloorPlan20": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 336
+    },
+    "fd": {
+     "episodes": 7,
+     "frames": 79
+    },
+    "lightwm_data": {
+     "episodes": 19,
+     "frames": 429
+    },
+    "objviews": {
+     "episodes": 24,
+     "frames": 577
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 51,
+   "frames": 1421
+  },
+  "FloorPlan201": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 3,
+     "frames": 43
+    },
+    "lightwm_data": {
+     "episodes": 11,
+     "frames": 366
+    },
+    "objviews": {
+     "episodes": 14,
+     "frames": 302
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 28,
+   "frames": 711
+  },
+  "FloorPlan202": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 44
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 368
+    },
+    "objviews": {
+     "episodes": 5,
+     "frames": 118
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 22,
+   "frames": 530
+  },
+  "FloorPlan203": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 15
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 348
+    },
+    "objviews": {
+     "episodes": 12,
+     "frames": 231
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 20,
+   "frames": 594
+  },
+  "FloorPlan205": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 19
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 332
+    },
+    "objviews": {
+     "episodes": 5,
+     "frames": 118
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 13,
+   "frames": 469
+  },
+  "FloorPlan206": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 15
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 334
+    },
+    "objviews": {
+     "episodes": 7,
+     "frames": 155
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 15,
+   "frames": 504
+  },
+  "FloorPlan208": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 13
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 341
+    },
+    "objviews": {
+     "episodes": 5,
+     "frames": 101
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 13,
+   "frames": 455
+  },
+  "FloorPlan21": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 63
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 393
+    },
+    "objviews": {
+     "episodes": 1,
+     "frames": 21
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 21,
+   "frames": 477
+  },
+  "FloorPlan210": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 63
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 452
+    },
+    "objviews": {
+     "episodes": 7,
+     "frames": 138
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 27,
+   "frames": 653
+  },
+  "FloorPlan211": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 64
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 425
+    },
+    "objviews": {
+     "episodes": 6,
+     "frames": 104
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 26,
+   "frames": 593
+  },
+  "FloorPlan212": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 8,
+     "frames": 100
+    },
+    "lightwm_data": {
+     "episodes": 16,
+     "frames": 424
+    },
+    "objviews": {
+     "episodes": 8,
+     "frames": 142
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 32,
+   "frames": 666
+  },
+  "FloorPlan213": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 6,
+     "frames": 82
+    },
+    "lightwm_data": {
+     "episodes": 17,
+     "frames": 435
+    },
+    "objviews": {
+     "episodes": 6,
+     "frames": 125
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 29,
+   "frames": 642
+  },
+  "FloorPlan214": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 6,
+     "frames": 63
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 428
+    },
+    "objviews": {
+     "episodes": 7,
+     "frames": 152
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 28,
+   "frames": 643
+  },
+  "FloorPlan215": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 52
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 388
+    },
+    "objviews": {
+     "episodes": 6,
+     "frames": 140
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 23,
+   "frames": 580
+  },
+  "FloorPlan216": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 11
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 338
+    },
+    "objviews": {
+     "episodes": 8,
+     "frames": 167
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 16,
+   "frames": 516
+  },
+  "FloorPlan217": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 69
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 504
+    },
+    "objviews": {
+     "episodes": 6,
+     "frames": 136
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 26,
+   "frames": 709
+  },
+  "FloorPlan218": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 58
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 402
+    },
+    "objviews": {
+     "episodes": 7,
+     "frames": 142
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 24,
+   "frames": 602
+  },
+  "FloorPlan219": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 3,
+     "frames": 41
+    },
+    "lightwm_data": {
+     "episodes": 11,
+     "frames": 373
+    },
+    "objviews": {
+     "episodes": 8,
+     "frames": 208
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 22,
+   "frames": 622
+  },
+  "FloorPlan22": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 66
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 394
+    },
+    "objviews": {
+     "episodes": 1,
+     "frames": 26
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 21,
+   "frames": 486
+  },
+  "FloorPlan220": {
+   "family": "FloorPlan 201-230",
+   "pools": {
+    "fd": {
+     "episodes": 6,
+     "frames": 64
+    },
+    "lightwm_data": {
+     "episodes": 17,
+     "frames": 390
+    },
+    "objviews": {
+     "episodes": 5,
+     "frames": 115
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 28,
+   "frames": 569
+  },
+  "FloorPlan23": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 6,
+     "frames": 66
+    },
+    "lightwm_data": {
+     "episodes": 17,
+     "frames": 408
+    },
+    "objviews": {
+     "episodes": 28,
+     "frames": 654
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 51,
+   "frames": 1128
+  },
+  "FloorPlan24": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 52
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 380
+    },
+    "objviews": {
+     "episodes": 25,
+     "frames": 584
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 42,
+   "frames": 1016
+  },
+  "FloorPlan25": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 132
+    },
+    "fd": {
+     "episodes": 6,
+     "frames": 80
+    },
+    "lightwm_data": {
+     "episodes": 17,
+     "frames": 426
+    },
+    "objviews": {
+     "episodes": 20,
+     "frames": 297
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 44,
+   "frames": 935
+  },
+  "FloorPlan26": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 56
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 403
+    },
+    "objviews": {
+     "episodes": 21,
+     "frames": 478
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 38,
+   "frames": 937
+  },
+  "FloorPlan27": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 47
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 390
+    },
+    "objviews": {
+     "episodes": 25,
+     "frames": 456
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 42,
+   "frames": 893
+  },
+  "FloorPlan28": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 65
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 411
+    },
+    "objviews": {
+     "episodes": 12,
+     "frames": 304
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 32,
+   "frames": 780
+  },
+  "FloorPlan29": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 75
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 424
+    },
+    "objviews": {
+     "episodes": 23,
+     "frames": 587
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 43,
+   "frames": 1086
+  },
+  "FloorPlan3": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 348
+    },
+    "fd": {
+     "episodes": 1,
+     "frames": 15
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 358
+    },
+    "objviews": {
+     "episodes": 26,
+     "frames": 668
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 35,
+   "frames": 1389
+  },
+  "FloorPlan30": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 51
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 384
+    },
+    "objviews": {
+     "episodes": 26,
+     "frames": 565
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 43,
+   "frames": 1000
+  },
+  "FloorPlan301": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 3,
+     "frames": 37
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 365
+    },
+    "objviews": {
+     "episodes": 5,
+     "frames": 107
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 21,
+   "frames": 509
+  },
+  "FloorPlan302": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 42
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 356
+    },
+    "objviews": {
+     "episodes": 9,
+     "frames": 174
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 26,
+   "frames": 572
+  },
+  "FloorPlan303": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 9,
+     "frames": 133
+    },
+    "lightwm_data": {
+     "episodes": 23,
+     "frames": 458
+    },
+    "objviews": {
+     "episodes": 5,
+     "frames": 104
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 37,
+   "frames": 695
+  },
+  "FloorPlan304": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 2,
+     "frames": 19
+    },
+    "lightwm_data": {
+     "episodes": 9,
+     "frames": 348
+    },
+    "objviews": {
+     "episodes": 5,
+     "frames": 128
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 16,
+   "frames": 495
+  },
+  "FloorPlan305": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 46
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 375
+    },
+    "objviews": {
+     "episodes": 5,
+     "frames": 101
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 22,
+   "frames": 522
+  },
+  "FloorPlan306": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 2,
+     "frames": 28
+    },
+    "lightwm_data": {
+     "episodes": 9,
+     "frames": 355
+    },
+    "objviews": {
+     "episodes": 8,
+     "frames": 212
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 19,
+   "frames": 595
+  },
+  "FloorPlan307": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 3,
+     "frames": 43
+    },
+    "lightwm_data": {
+     "episodes": 11,
+     "frames": 358
+    },
+    "objviews": {
+     "episodes": 10,
+     "frames": 246
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 24,
+   "frames": 647
+  },
+  "FloorPlan308": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 3,
+     "frames": 28
+    },
+    "lightwm_data": {
+     "episodes": 11,
+     "frames": 315
+    },
+    "objviews": {
+     "episodes": 11,
+     "frames": 247
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 25,
+   "frames": 590
+  },
+  "FloorPlan310": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 7,
+     "frames": 69
+    },
+    "lightwm_data": {
+     "episodes": 21,
+     "frames": 450
+    },
+    "objviews": {
+     "episodes": 4,
+     "frames": 94
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 32,
+   "frames": 613
+  },
+  "FloorPlan311": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 11,
+     "frames": 126
+    },
+    "lightwm_data": {
+     "episodes": 25,
+     "frames": 507
+    },
+    "objviews": {
+     "episodes": 11,
+     "frames": 222
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 47,
+   "frames": 855
+  },
+  "FloorPlan312": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 54
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 374
+    },
+    "objviews": {
+     "episodes": 10,
+     "frames": 221
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 27,
+   "frames": 649
+  },
+  "FloorPlan313": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 39
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 386
+    },
+    "objviews": {
+     "episodes": 5,
+     "frames": 98
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 23,
+   "frames": 523
+  },
+  "FloorPlan314": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 39
+    },
+    "lightwm_data": {
+     "episodes": 11,
+     "frames": 361
+    },
+    "objviews": {
+     "episodes": 4,
+     "frames": 92
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 19,
+   "frames": 492
+  },
+  "FloorPlan315": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 12,
+     "frames": 150
+    },
+    "lightwm_data": {
+     "episodes": 29,
+     "frames": 443
+    },
+    "objviews": {
+     "episodes": 9,
+     "frames": 208
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 50,
+   "frames": 801
+  },
+  "FloorPlan316": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 6,
+     "frames": 40
+    },
+    "lightwm_data": {
+     "episodes": 17,
+     "frames": 354
+    },
+    "objviews": {
+     "episodes": 4,
+     "frames": 77
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 27,
+   "frames": 471
+  },
+  "FloorPlan317": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 1
+    },
+    "lightwm_data": {
+     "episodes": 5,
+     "frames": 330
+    },
+    "objviews": {
+     "episodes": 4,
+     "frames": 67
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 10,
+   "frames": 398
+  },
+  "FloorPlan318": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 2,
+     "frames": 4
+    },
+    "lightwm_data": {
+     "episodes": 8,
+     "frames": 341
+    },
+    "objviews": {
+     "episodes": 4,
+     "frames": 78
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 14,
+   "frames": 423
+  },
+  "FloorPlan319": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 49
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 364
+    },
+    "objviews": {
+     "episodes": 10,
+     "frames": 207
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 27,
+   "frames": 620
+  },
+  "FloorPlan320": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 6,
+     "frames": 48
+    },
+    "lightwm_data": {
+     "episodes": 11,
+     "frames": 392
+    },
+    "objviews": {
+     "episodes": 9,
+     "frames": 179
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 26,
+   "frames": 619
+  },
+  "FloorPlan321": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 36
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 379
+    },
+    "objviews": {
+     "episodes": 9,
+     "frames": 204
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 29,
+   "frames": 619
+  },
+  "FloorPlan322": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 50
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 397
+    },
+    "objviews": {
+     "episodes": 10,
+     "frames": 222
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 27,
+   "frames": 669
+  },
+  "FloorPlan323": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 6,
+     "frames": 75
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 450
+    },
+    "objviews": {
+     "episodes": 10,
+     "frames": 231
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 31,
+   "frames": 756
+  },
+  "FloorPlan324": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 58
+    },
+    "lightwm_data": {
+     "episodes": 13,
+     "frames": 393
+    },
+    "objviews": {
+     "episodes": 8,
+     "frames": 166
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 26,
+   "frames": 617
+  },
+  "FloorPlan326": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 11
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 344
+    },
+    "objviews": {
+     "episodes": 12,
+     "frames": 256
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 20,
+   "frames": 611
+  },
+  "FloorPlan329": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 4,
+     "frames": 39
+    },
+    "lightwm_data": {
+     "episodes": 11,
+     "frames": 358
+    },
+    "objviews": {
+     "episodes": 9,
+     "frames": 195
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 24,
+   "frames": 592
+  },
+  "FloorPlan330": {
+   "family": "FloorPlan 301-330",
+   "pools": {
+    "fd": {
+     "episodes": 5,
+     "frames": 41
+    },
+    "lightwm_data": {
+     "episodes": 15,
+     "frames": 353
+    },
+    "objviews": {
+     "episodes": 11,
+     "frames": 261
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 31,
+   "frames": 655
+  },
+  "FloorPlan4": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 240
+    },
+    "lightwm_data": {
+     "episodes": 5,
+     "frames": 330
+    },
+    "objviews": {
+     "episodes": 24,
+     "frames": 606
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 30,
+   "frames": 1176
+  },
+  "FloorPlan401": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 15
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 335
+    },
+    "objviews": {
+     "episodes": 14,
+     "frames": 275
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 22,
+   "frames": 625
+  },
+  "FloorPlan402": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 2,
+     "frames": 28
+    },
+    "lightwm_data": {
+     "episodes": 9,
+     "frames": 344
+    },
+    "objviews": {
+     "episodes": 9,
+     "frames": 227
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 20,
+   "frames": 599
+  },
+  "FloorPlan409": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 15
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 333
+    },
+    "objviews": {
+     "episodes": 11,
+     "frames": 187
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 19,
+   "frames": 535
+  },
+  "FloorPlan412": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 15
+    },
+    "lightwm_data": {
+     "episodes": 9,
+     "frames": 367
+    },
+    "objviews": {
+     "episodes": 8,
+     "frames": 193
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 18,
+   "frames": 575
+  },
+  "FloorPlan415": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 13
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 305
+    },
+    "objviews": {
+     "episodes": 13,
+     "frames": 255
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 21,
+   "frames": 573
+  },
+  "FloorPlan417": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 13
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 345
+    },
+    "objviews": {
+     "episodes": 10,
+     "frames": 236
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 18,
+   "frames": 594
+  },
+  "FloorPlan418": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 3,
+     "frames": 41
+    },
+    "lightwm_data": {
+     "episodes": 11,
+     "frames": 344
+    },
+    "objviews": {
+     "episodes": 12,
+     "frames": 248
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 26,
+   "frames": 633
+  },
+  "FloorPlan422": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 2,
+     "frames": 24
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 343
+    },
+    "objviews": {
+     "episodes": 13,
+     "frames": 242
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 22,
+   "frames": 609
+  },
+  "FloorPlan423": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 11
+    },
+    "lightwm_data": {
+     "episodes": 5,
+     "frames": 330
+    },
+    "objviews": {
+     "episodes": 12,
+     "frames": 253
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 18,
+   "frames": 594
+  },
+  "FloorPlan424": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 13
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 334
+    },
+    "objviews": {
+     "episodes": 12,
+     "frames": 183
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 20,
+   "frames": 530
+  },
+  "FloorPlan425": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 15
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 337
+    },
+    "objviews": {
+     "episodes": 11,
+     "frames": 163
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 19,
+   "frames": 515
+  },
+  "FloorPlan426": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 1
+    },
+    "lightwm_data": {
+     "episodes": 5,
+     "frames": 330
+    },
+    "objviews": {
+     "episodes": 14,
+     "frames": 286
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 20,
+   "frames": 617
+  },
+  "FloorPlan427": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 2,
+     "frames": 25
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 338
+    },
+    "objviews": {
+     "episodes": 16,
+     "frames": 353
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 25,
+   "frames": 716
+  },
+  "FloorPlan428": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 2,
+     "frames": 26
+    },
+    "lightwm_data": {
+     "episodes": 9,
+     "frames": 344
+    },
+    "objviews": {
+     "episodes": 10,
+     "frames": 234
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 21,
+   "frames": 604
+  },
+  "FloorPlan429": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 3,
+     "frames": 33
+    },
+    "lightwm_data": {
+     "episodes": 11,
+     "frames": 358
+    },
+    "objviews": {
+     "episodes": 13,
+     "frames": 291
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 27,
+   "frames": 682
+  },
+  "FloorPlan430": {
+   "family": "FloorPlan 401-430",
+   "pools": {
+    "fd": {
+     "episodes": 2,
+     "frames": 30
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 383
+    },
+    "objviews": {
+     "episodes": 15,
+     "frames": 342
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 24,
+   "frames": 755
+  },
+  "FloorPlan5": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 324
+    },
+    "lightwm_data": {
+     "episodes": 5,
+     "frames": 330
+    },
+    "objviews": {
+     "episodes": 26,
+     "frames": 561
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 32,
+   "frames": 1215
+  },
+  "FloorPlan6": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 432
+    },
+    "fd": {
+     "episodes": 1,
+     "frames": 15
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 364
+    },
+    "objviews": {
+     "episodes": 26,
+     "frames": 643
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 35,
+   "frames": 1454
+  },
+  "FloorPlan7": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "cov": {
+     "episodes": 1,
+     "frames": 996
+    },
+    "lightwm_data": {
+     "episodes": 5,
+     "frames": 330
+    },
+    "objviews": {
+     "episodes": 25,
+     "frames": 597
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 31,
+   "frames": 1923
+  },
+  "FloorPlan8": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "lightwm_data": {
+     "episodes": 5,
+     "frames": 330
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 5,
+   "frames": 330
+  },
+  "FloorPlan9": {
+   "family": "FloorPlan 1-30",
+   "pools": {
+    "fd": {
+     "episodes": 1,
+     "frames": 13
+    },
+    "lightwm_data": {
+     "episodes": 7,
+     "frames": 354
+    },
+    "objviews": {
+     "episodes": 21,
+     "frames": 503
+    }
+   },
+   "has_fd": true,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 29,
+   "frames": 870
+  },
+  "procthor-val-0": {
+   "family": "procthor-val",
+   "pools": {
+    "procthor": {
+     "episodes": 1,
+     "frames": 1444
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 1,
+   "frames": 1444
+  },
+  "procthor-val-1": {
+   "family": "procthor-val",
+   "pools": {
+    "procthor": {
+     "episodes": 1,
+     "frames": 1144
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 1,
+   "frames": 1144
+  },
+  "procthor-val-2": {
+   "family": "procthor-val",
+   "pools": {
+    "procthor": {
+     "episodes": 1,
+     "frames": 2252
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 1,
+   "frames": 2252
+  },
+  "procthor-val-3": {
+   "family": "procthor-val",
+   "pools": {
+    "procthor": {
+     "episodes": 1,
+     "frames": 1356
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 1,
+   "frames": 1356
+  },
+  "procthor-val-4": {
+   "family": "procthor-val",
+   "pools": {
+    "procthor": {
+     "episodes": 1,
+     "frames": 1028
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 1,
+   "frames": 1028
+  },
+  "virtualhome-0": {
+   "family": "virtualhome",
+   "pools": {
+    "virtualhome": {
+     "episodes": 2,
+     "frames": 120
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 2,
+   "frames": 120
+  },
+  "virtualhome-1": {
+   "family": "virtualhome",
+   "pools": {
+    "virtualhome": {
+     "episodes": 1,
+     "frames": 60
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 1,
+   "frames": 60
+  },
+  "virtualhome-15": {
+   "family": "virtualhome",
+   "pools": {
+    "virtualhome": {
+     "episodes": 1,
+     "frames": 60
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 1,
+   "frames": 60
+  },
+  "virtualhome-17": {
+   "family": "virtualhome",
+   "pools": {
+    "virtualhome": {
+     "episodes": 2,
+     "frames": 120
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 2,
+   "frames": 120
+  },
+  "virtualhome-2": {
+   "family": "virtualhome",
+   "pools": {
+    "virtualhome": {
+     "episodes": 2,
+     "frames": 120
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 2,
+   "frames": 120
+  },
+  "virtualhome-20": {
+   "family": "virtualhome",
+   "pools": {
+    "virtualhome": {
+     "episodes": 1,
+     "frames": 60
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 1,
+   "frames": 60
+  },
+  "virtualhome-3": {
+   "family": "virtualhome",
+   "pools": {
+    "virtualhome": {
+     "episodes": 1,
+     "frames": 60
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 1,
+   "frames": 60
+  },
+  "virtualhome-40": {
+   "family": "virtualhome",
+   "pools": {
+    "virtualhome": {
+     "episodes": 1,
+     "frames": 60
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 1,
+   "frames": 60
+  },
+  "virtualhome-5": {
+   "family": "virtualhome",
+   "pools": {
+    "virtualhome": {
+     "episodes": 2,
+     "frames": 120
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 2,
+   "frames": 120
+  },
+  "virtualhome-6": {
+   "family": "virtualhome",
+   "pools": {
+    "virtualhome": {
+     "episodes": 2,
+     "frames": 120
+    }
+   },
+   "has_fd": false,
+   "alfred_label": null,
+   "split": null,
+   "episodes": 2,
+   "frames": 120
+  }
+ },
+ "meta": {
+  "n_scenes": 104,
+  "n_ai2thor": 89,
+  "n_procthor": 5,
+  "n_virtualhome": 10
+ },
+ "official120_missing": {
+  "FloorPlan 201-230": [
+   "FloorPlan204",
+   "FloorPlan207",
+   "FloorPlan209",
+   "FloorPlan221",
+   "FloorPlan222",
+   "FloorPlan223",
+   "FloorPlan224",
+   "FloorPlan225",
+   "FloorPlan226",
+   "FloorPlan227",
+   "FloorPlan228",
+   "FloorPlan229",
+   "FloorPlan230"
+  ],
+  "FloorPlan 301-330": [
+   "FloorPlan309",
+   "FloorPlan325",
+   "FloorPlan327",
+   "FloorPlan328"
+  ],
+  "FloorPlan 401-430": [
+   "FloorPlan403",
+   "FloorPlan404",
+   "FloorPlan405",
+   "FloorPlan406",
+   "FloorPlan407",
+   "FloorPlan408",
+   "FloorPlan410",
+   "FloorPlan411",
+   "FloorPlan413",
+   "FloorPlan414",
+   "FloorPlan416",
+   "FloorPlan419",
+   "FloorPlan420",
+   "FloorPlan421"
+  ]
+ }
+}

@@ -1,10 +1,14 @@
 data/*.pkl
+data/oct21.json
 __pycache__/
 *.pyc
 .venv/
 checkpoints/
+checkpoints_cloud/
+checkpoints_local/
 checkpoints_smoke/
 checkpoints_dq/
 checkpoints_v2/
 upload_tars/
 phase_d/configs/
+交接总结_2026-09-02.md

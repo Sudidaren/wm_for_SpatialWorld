@@ -137,6 +137,9 @@ def main() -> None:
     ap.add_argument("--scenes", nargs="*", type=int,
                     default=[0, 1, 2, 3, 5, 6, 15, 17, 20, 40])
     ap.add_argument("--anchors-per-scene", type=int, default=2)
+    ap.add_argument("--auto-anchor", action="store_true",
+                    help="for scenes without task anchors, use room centers "
+                         "as capture viewpoints")
     ap.add_argument("--tasks-root",
                     default="/home/sudidaren/SpatialWorld/data/"
                             "virtualhome/tasks")
@@ -166,7 +169,23 @@ def main() -> None:
     total_frames = 0
 
     for scene in args.scenes:
-        positions = anchors.get(scene, [])[: args.anchors_per_scene]
+        positions = list(anchors.get(scene, []))[: args.anchors_per_scene]
+        if args.auto_anchor:
+            post_reset(comm, scene)
+            time.sleep(0.8)
+            _okg, g0 = comm.environment_graph()
+            for n in (g0 or {}).get("nodes", []) or []:
+                if len(positions) >= args.anchors_per_scene:
+                    break
+                if n.get("category") not in ("Rooms", "Room"):
+                    continue
+                tr = n.get("obj_transform") or {}
+                pos = tr.get("position")
+                if not isinstance(pos, list) or len(pos) < 3:
+                    continue
+                pt = [float(pos[0]), 1.2, float(pos[2])]
+                if pt not in positions:
+                    positions.append(pt)
         if not positions:
             print(f"scene {scene}: no anchors, skip")
             continue

@@ -1,0 +1,15 @@
+# LightWM dense detection head - exact local environment (2026-09-06)
+# Python 3.12.3
+# Install:
+#   pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
+#   pip install -r requirements.txt
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+transformers==5.15.1
+numpy==2.5.2
+Pillow==12.3.0
+opencv-python==5.0.0.93
+huggingface-hub==1.28.0
+tqdm==4.70.0
+PyYAML==6.0.3
+# optional (auto fallback exists without it): scipy

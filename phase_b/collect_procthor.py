@@ -50,6 +50,11 @@ def main() -> None:
 
     for hi in range(args.start, min(args.start + args.houses, len(houses))):
         house = houses[hi]
+        ep_id = f"procthor_{args.split}_{hi:04d}"
+        ep_dir = os.path.join(args.out, "episodes", ep_id)
+        if os.path.isfile(os.path.join(ep_dir, "episode.json")):
+            print(f"house {hi}: {ep_id} exists, skip", flush=True)
+            continue
         controller = ai2thor.controller.Controller(
             scene=house, width=800, height=600,
             renderDepthImage=True, renderInstanceSegmentation=True,
@@ -61,8 +66,6 @@ def main() -> None:
             controller.stop()
             print(f"house {hi}: only {len(rp)} reachable positions, skip")
             continue
-        ep_id = f"procthor_{args.split}_{hi:04d}"
-        ep_dir = os.path.join(args.out, "episodes", ep_id)
         frame_dir = os.path.join(ep_dir, "frames")
         os.makedirs(frame_dir, exist_ok=True)
         frames_meta = []

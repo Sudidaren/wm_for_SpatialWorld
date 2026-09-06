@@ -104,7 +104,7 @@ def main(ckpt: str, n_frames: int = 60, device: str = "cuda",
                     fp += 1
             fn += len(gts) - len(used)
             # depth accuracy on a few frames
-            if len(depth_mae) < 12:
+            if len(depth_mae) < 12 and fr.get("depth"):
                 d = model.depth(rgb).cpu()
                 gt = torch.from_numpy(load_depth(fr["depth"])).unsqueeze(0)
                 d = torch.nn.functional.interpolate(

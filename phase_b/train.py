@@ -32,6 +32,7 @@ from dataset import (  # noqa: E402
 )
 from model import (  # noqa: E402
     PerceptionModel,
+    OBJ_SUP_THR,
     decode_dense,
     dense_targets,
     giou,
@@ -39,17 +40,19 @@ from model import (  # noqa: E402
 )
 
 
-def eval_dense_sample(model, index, device, n=60, obj_thr=0.4):
-    """Quick detection P/R on held-out frames (for training-time monitoring)."""
+def eval_dense_sample(model, index, device, n=60, obj_thr=0.25):
+    """Quick detection P/R on a frame sample (training-time monitoring).
+
+    Reports tp/fp/fn at IoU 0.5 and 0.3 (relaxed IoU shows localization
+    progress before boxes are accurate enough for the strict threshold)."""
     import dataset as ds_mod
     from dataset import load_rgb
-    from model import decode_dense
     type2id = {t: i for i, t in enumerate(index["object_types"])}
     exclude = {type2id[t] for t in ("Floor", "Wall", "Ceiling", "Window")
                if t in type2id}
     frames = [f for f in index["frames"][::97]
               if f.get("rgb") and not f["rgb"].endswith("/")][:n]
-    tp = fp = fn = 0
+    res = {0.5: [0, 0, 0], 0.3: [0, 0, 0]}  # iou_thr -> [tp, fp, fn]
     model.eval()
     with torch.no_grad():
         for fr in frames:
@@ -58,7 +61,7 @@ def eval_dense_sample(model, index, device, n=60, obj_thr=0.4):
             d = model.dense_detect(rgb)
             boxes, clss, scores = decode_dense(
                 d["objectness"], d["offset"], d["size"], d["class_logits"],
-                obj_thr=obj_thr, nms_thr=0.5)
+                grid=model.grid, obj_thr=obj_thr, nms_thr=0.5)
             IMG = ds_mod.IMG_SIZE
             bx = boxes[0].cpu().numpy() * IMG
             preds = [(b[0] - b[2] / 2, b[1] - b[3] / 2,
@@ -73,17 +76,29 @@ def eval_dense_sample(model, index, device, n=60, obj_thr=0.4):
                 sx, sy = IMG / 800.0, IMG / 600.0
                 gts.append((b[0] * sx, b[1] * sy, b[2] * sx, b[3] * sy))
             used = set()
-            for p in preds:
+            matches = {}  # pred idx -> (iou, gt idx)
+            for pi, p in enumerate(preds):
                 best = max(((iou2(p, g), i) for i, g in enumerate(gts)
                             if i not in used), default=(0, -1))
-                if best[1] >= 0 and best[0] > 0.5:
-                    tp += 1
+                if best[1] >= 0 and best[0] > 0.3:
+                    matches[pi] = best
                     used.add(best[1])
-                else:
-                    fp += 1
-            fn += len(gts) - len(used)
+            for iou_thr in res:
+                tp = sum(1 for v in matches.values() if v[0] > iou_thr)
+                fp = len(preds) - tp
+                fn = len(gts) - tp
+                res[iou_thr][0] += tp
+                res[iou_thr][1] += fp
+                res[iou_thr][2] += fn
     model.train()
-    return tp / max(tp + fp, 1), tp / max(tp + fn, 1)
+    for iou_thr in (0.5, 0.3):
+        tp, fp, fn = res[iou_thr]
+        p = tp / max(tp + fp, 1)
+        r = tp / max(tp + fn, 1)
+        print(f"    iou>{iou_thr}: precision={p:.3f} recall={r:.3f} "
+              f"(tp={tp} fp={fp} fn={fn})")
+    return res[0.5][0] / max(sum(res[0.5][:2]), 1), \
+        res[0.5][0] / max(sum(res[0.5][0::2]), 1)
 
 
 def iou2(a, b):
@@ -262,7 +277,7 @@ def train_dense(model, loader, epochs, lr, out, device, grid=16,
                 obj_t, off_t, size_t, cls_t, npos = dense_targets(
                     boxes, classes, num, grid, device)
                 obj_loss = focal_loss(out_d["objectness"], obj_t)
-                mask = (obj_t > 0.5).float()
+                mask = (obj_t > OBJ_SUP_THR).float()
                 n = mask.sum().clamp(min=1)
                 off_loss = ((torch.abs(out_d["offset"] - off_t) * mask).sum() / n)
                 size_loss = ((torch.abs(out_d["size"] - size_t) * mask).sum() / n)
@@ -273,7 +288,7 @@ def train_dense(model, loader, epochs, lr, out, device, grid=16,
                         cls_logits.reshape(-1, cls_logits.shape[-1]),
                         cls_t.reshape(-1), reduction="none") *
                         mask.reshape(-1)).sum() / n
-                loss = obj_loss + 5.0 * off_loss + 5.0 * size_loss + 0.5 * cls_loss
+                loss = obj_loss + 5.0 * off_loss + 5.0 * size_loss + 1.5 * cls_loss
             opt.zero_grad()
             scaler.scale(loss).backward()
             scaler.step(opt)
@@ -287,9 +302,8 @@ def train_dense(model, loader, epochs, lr, out, device, grid=16,
         avg = tot / max(bi + 1, 1)
         print(f"[dense] epoch {ep} avg_loss={avg:.3f} time={time.time()-t0:.0f}s")
         if eval_every and (ep + 1) % eval_every == 0 and index is not None:
-            p, r = eval_dense_sample(model, index, device)
-            print(f"  [dense] epoch {ep} val detection: precision={p:.3f} "
-                  f"recall={r:.3f}")
+            print(f"  [dense] epoch {ep} val detection (obj_thr=0.25):")
+            eval_dense_sample(model, index, device)
         scheduler.step()
         if avg < best:
             best = avg
@@ -307,6 +321,8 @@ def main():
     ap.add_argument("--out", default="/home/sudidaren/lightwm_phases/checkpoints")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--workers", type=int, default=6,
+                    help="DataLoader workers (0 disables multiprocessing)")
     ap.add_argument("--variant", choices=["small", "base"], default="small")
     ap.add_argument("--resolution", type=int, default=224)
     ap.add_argument("--width", type=int, default=256)
@@ -366,7 +382,8 @@ def main():
     else:
         ds = FeasibilityDataset(index, limit=args.limit, seed=args.seed)
         loader = DataLoader(ds, batch_size=args.batch, shuffle=True,
-                            num_workers=6, collate_fn=collate_feasibility,
+                            num_workers=args.workers,
+                            collate_fn=collate_feasibility,
                             pin_memory=True)
         train_feasibility(model, loader, args.epochs, args.lr, args.out, device,
                           num_errors)
@@ -378,9 +395,11 @@ def _make_loader(ds, args, collate):
         sampler = WeightedRandomSampler(ds.weights, len(ds.weights),
                                         replacement=True)
         return DataLoader(ds, batch_size=args.batch, sampler=sampler,
-                          num_workers=6, collate_fn=collate, pin_memory=True)
+                          num_workers=args.workers, collate_fn=collate,
+                          pin_memory=True)
     return DataLoader(ds, batch_size=args.batch, shuffle=True,
-                      num_workers=6, collate_fn=collate, pin_memory=True)
+                      num_workers=args.workers, collate_fn=collate,
+                      pin_memory=True)
 
 
 if __name__ == "__main__":
