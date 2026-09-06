@@ -1,0 +1,27 @@
+.codegraph/
+
+outputs/
+benchmark_outputs/
+outputs_completed/
+
+# Python bytecode/cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# uv virtual environments
+.venv/
+
+# EmbodiedCity generated images
+data/embodiedcity/Datasets/Imgs/
+
+# Local cleanup/archive and generated game GT scratch files
+used/
+experiments/game_min_steps/
+/maze_config.py
+/maze3d_pro_openai_evaluation.py
+main/
+SpatialWorld_NeurIPS_2026 (1)/
+
+# Large third-party simulator binaries (installed separately, not source)
+envs/virtualhome/simulation/
