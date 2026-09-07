@@ -1,0 +1,19 @@
+{
+  "architecture": "bilinear_type_v5",
+  "checkpoint": "phase_c/hidden_world_belief/checkpoints/spatialworld_v2_finetune_mixed_balanced.pt",
+  "data": "phase_c/hidden_world_belief/data/procthor_hidden_location_aligned_v2",
+  "split": "test",
+  "examples": 200,
+  "metrics": {
+    "instance_hit1": 0.605,
+    "instance_hit2": 0.9,
+    "instance_hit3": 0.97,
+    "instance_hit5": 0.98,
+    "instance_mean_rank": 1.6,
+    "instance_mrr": 0.7810059523809525,
+    "type_hit1": 0.61,
+    "type_hit3": 0.975,
+    "type_mrr": 0.7860119047619049
+  },
+  "deployment": "final"
+}

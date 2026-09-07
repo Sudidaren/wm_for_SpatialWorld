@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import sys
 import time
 from datetime import datetime
 from typing import Any, Dict, Iterable, Optional
@@ -362,6 +363,7 @@ def think_node(state: AgentState) -> AgentState:
                     'action_string': parsed['action_string'],
                     'mem_hint': mem_hint_snapshot,
                     'fd_hint': state.get('_fd_pending', ''),
+                    'hidden_belief': state.get('_hidden_belief_diagnostics', {}),
                 },
             )
             state['conversation_history'].append({
@@ -423,6 +425,75 @@ def _append_step_log(state: AgentState, record: dict) -> None:
             fh.write(_json.dumps(record, ensure_ascii=False) + '\n')
     except Exception:
         pass
+
+
+def _hidden_location_hint(state: AgentState, metadata: dict, action: dict,
+                          error_message: Optional[str]) -> str:
+    """Render the deployment-v2 Top-k hint from perceived furniture only."""
+    mem_cfg = (state.get('config') or {}).get('memory_probe') or {}
+    cfg = mem_cfg.get('hidden_location_advisor') or {}
+    if not cfg.get('enabled'):
+        return ''
+    advisor = state.get('_hidden_location_advisor')
+    if advisor is None:
+        from mllm_base_agent.agent.hidden_location_advisor import HiddenLocationAdvisor
+        advisor = HiddenLocationAdvisor(cfg['checkpoint'])
+        state['_hidden_location_advisor'] = advisor
+    targets = cfg.get('targets') or mem_cfg.get('targets') or []
+    visible_types = {
+        item.get('objectType') for item in (metadata.get('objects') or [])
+        if item.get('visible')
+    }
+    searched = state.setdefault('_hidden_searched_absent', {})
+    beliefs = state.setdefault('_hidden_beliefs', {})
+    if not error_message and action.get('action_name') == 'OpenObject':
+        opened_type = action.get('object_type')
+        candidates = [
+            item for item in (metadata.get('furniture') or [])
+            if item.get('objectType') == opened_type
+        ]
+        candidates.sort(key=lambda item: (
+            -int(item.get('last_seen') or 0),
+            float(item.get('distance') or 1e9),
+            str(item.get('objectId') or ''),
+        ))
+        if candidates:
+            opened_id = str(candidates[0].get('objectId'))
+            for target in targets:
+                if target not in visible_types:
+                    searched.setdefault(target, set()).add(opened_id)
+                    belief = beliefs.get(target)
+                    if belief is not None:
+                        belief.confirm_absent(opened_id)
+    hints = []
+    all_diagnostics = {}
+    for target in targets:
+        if target in visible_types:
+            continue
+        room_type = cfg.get('room_type', 'kitchen')
+        top_k = int(cfg.get('top_k', 3))
+        belief = beliefs.get(target)
+        if belief is None:
+            belief = advisor.new_belief(target, room_type, top_k)
+            beliefs[target] = belief
+            for receptacle_id in searched.get(target, ()):
+                belief.confirm_absent(receptacle_id)
+        ranked, diagnostics = advisor.update_belief(
+            belief,
+            metadata.get('furniture') or [],
+            observation_id=f"{state.get('step_count', 0)}:{target}",
+            learned_log_likelihood=(
+                state.get('_hidden_learned_log_likelihood', {}).get(target)),
+            learned_alpha=float(cfg.get('learned_alpha', 0.0)),
+            projection=str(cfg.get('safety_projection', 'exact')),
+            top_k=top_k,
+        )
+        all_diagnostics[target] = diagnostics
+        hint = advisor.render_ranked_hint(target, ranked)
+        if hint:
+            hints.append(hint)
+    state['_hidden_belief_diagnostics'] = all_diagnostics
+    return '\n'.join(hints)
 
 
 def act_node(state: AgentState) -> AgentState:
@@ -575,8 +646,12 @@ def act_node(state: AgentState) -> AgentState:
                                 "sim segmentation perception is disabled")
                         if ckpt:
                             try:
-                                sys.path.insert(
-                                    0, '/home/sudidaren/lightwm_phases')
+                                runtime_root = (
+                                    wm_cfg.get('perception_runtime_root')
+                                    or os.environ.get('LIGHTWM_ROOT')
+                                    or '/home/sudidaren/lightwm_phases'
+                                )
+                                sys.path.insert(0, runtime_root)
                                 from phase_b.perception_runtime import (
                                     PerceptionRuntime)
                                 runtime = PerceptionRuntime(
@@ -627,13 +702,18 @@ def act_node(state: AgentState) -> AgentState:
                             action=action,
                             error_message=error_message,
                         )
-                state['_mem_pending'] = probe.update(
-                    metadata=raw_meta,
-                    action_name=action.get('action_name'),
-                    error_message=error_message,
-                    object_type=action.get('object_type'),
-                    env=state.get('env'),
-                )
+                if mem_cfg.get('advisor_only'):
+                    state['_mem_pending'] = _hidden_location_hint(
+                        state, raw_meta, action, error_message
+                    )
+                else:
+                    state['_mem_pending'] = probe.update(
+                        metadata=raw_meta,
+                        action_name=action.get('action_name'),
+                        error_message=error_message,
+                        object_type=action.get('object_type'),
+                        env=state.get('env'),
+                    )
                 if state['_mem_pending']:
                     print(f"\n[MemoryProbe] step {state.get('step_count', 0)}: "
                           f"{state['_mem_pending'].replace(chr(10), ' | ')}", flush=True)

@@ -206,7 +206,11 @@ class WorldModel:
             if z <= 0 or not math.isfinite(z):
                 continue
             pos = self._unproject(u, v, z, agent_pos, agent_rot)
-            oid = self._match_or_create_slot(det["type"], pos)
+            object_type = str(det["type"])
+            if object_type in _FURNITURE_TYPES:
+                self._update_detected_furniture(object_type, pos)
+                continue
+            oid = self._match_or_create_slot(object_type, pos)
             if oid is None:
                 continue
             slot = self._slots[oid]
@@ -226,6 +230,33 @@ class WorldModel:
         if self.landmark_correction and len(matched) >= 2:
             self._correct_pose_with_landmarks(matched)
         return visible_ids
+
+    def _update_detected_furniture(self, object_type: str, pos) -> None:
+        """Associate a dense furniture detection with a persistent track."""
+        best_id, best_d = None, 2.0
+        for oid, slot in self._furniture.items():
+            if slot["type"] != object_type:
+                continue
+            distance = math.hypot(slot["pos"][0] - pos[0], slot["pos"][2] - pos[2])
+            if distance < best_d:
+                best_id, best_d = oid, distance
+        if best_id is None:
+            self._slot_seq += 1
+            best_id = f"det|{object_type}|{self._slot_seq}"
+            self._furniture[best_id] = {
+                "type": object_type,
+                "pos": list(pos),
+                "seen": 1,
+                "last_seen": self._step,
+            }
+            return
+        slot = self._furniture[best_id]
+        alpha = 0.5
+        slot["pos"] = [
+            alpha * slot["pos"][i] + (1 - alpha) * pos[i] for i in range(3)
+        ]
+        slot["seen"] = int(slot.get("seen", 0)) + 1
+        slot["last_seen"] = self._step
 
     def _match_or_create_slot(self, otype: str, pos) -> Optional[str]:
         """Match a detection to the nearest existing slot of the same type

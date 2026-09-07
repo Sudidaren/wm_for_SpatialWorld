@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "status": "final_deployed",
+  "frozen_on": "2026-09-07",
+  "checkpoint": "phase_c/hidden_world_belief/checkpoints/spatialworld_v2_finetune_mixed_balanced.pt",
+  "sha256": "784c8f41ba81b396ec2770106744ed86deb01c4ee3a9cf054462f0e3b87e0ca6",
+  "architecture": "bilinear_type_v5",
+  "ranking_contract": "static_type_prior_with_stable_instance_ties",
+  "observation_update": {
+    "learned_alpha": 0.0,
+    "reliable_confirmed_empty_removal": true
+  },
+  "selection": {
+    "spatialworld_validation_only": true,
+    "test_data_read_during_selection": false
+  },
+  "test_protocol": {
+    "procthor_aligned": "one evaluation after freeze",
+    "spatialworld_benchmark": "one evaluation after freeze"
+  },
+  "published_checkpoints": 1
+}

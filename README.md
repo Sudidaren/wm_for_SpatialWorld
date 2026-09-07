@@ -131,7 +131,20 @@ bash phase_b/cloud_train.sh
 参数对照：本地小档 `--variant small --resolution 224 --width 256`；
 云上大档 `--variant base --resolution 336 --width 384 --amp`。
 
-## 当前状态（截至 2026-08-25）
+## Phase C 最终版本（2026-09-07）
+
+新版隐藏位置 prior 已完成 ProcTHOR 官方 split 对齐、SpatialWorld train-only
+微调和冻结后双 test。LightWM 默认部署新版静态 v5 prior；实例 residual 因
+SpatialWorld Hit@3 小幅下降而未部署，observation head 退回 `alpha=0`。完整数据、
+指标、步数 A/B 与部署判定见
+[`phase_c/hidden_world_belief/PHASE_C_V2_FINAL_REPORT_2026-09-07.md`](phase_c/hidden_world_belief/PHASE_C_V2_FINAL_REPORT_2026-09-07.md)。
+
+GitHub 只保留该部署版本及其复现所需的代码、checkpoint、训练/验证/test 数据
+和最终报告。未通过 SpatialWorld test 安全门槛的候选仅保存在本地实验目录，
+不进入仓库发布版本。详细说明见
+[`phase_c/hidden_world_belief/README.md`](phase_c/hidden_world_belief/README.md)。
+
+## 当前状态（截至 2026-09-07）
 
 | 能力 | 状态 |
 |---|---|
