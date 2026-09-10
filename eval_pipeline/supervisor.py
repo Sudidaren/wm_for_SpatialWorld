@@ -562,7 +562,7 @@ def parse_args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--scenes", type=str, default=None,
                     help="逗号分隔：ai2thor,procthor,virtualhome")
-    ap.add_argument("--profile", choices=["llm", "winman_llm", "rl"],
+    ap.add_argument("--profile", choices=["llm", "wingman_llm", "rl"],
                     default=None)
     ap.add_argument("--model", type=str, default=None,
                     help="LLM 预设名，如 gpt-5 / gemini-3.1-pro / qwen3.5")
@@ -583,7 +583,7 @@ def parse_args(argv=None):
 
 def _preflight() -> None:
     dry_model_sanity()
-    if cfg.PROFILE in ("llm", "winman_llm"):
+    if cfg.PROFILE in ("llm", "wingman_llm"):
         model = cfg.resolve_llm_model()
         if (str(model.get("provider", "")).lower() == "openai"
                 and not model.get("api_key")
@@ -616,11 +616,11 @@ def main(argv=None):
     bad = [s for s in cfg.SCENES if s not in allowed]
     if bad:
         raise SystemExit(f"不支持的场景: {bad}（可选 {sorted(allowed)}）")
-    if cfg.PROFILE == "winman_llm" and "virtualhome" in cfg.SCENES:
+    if cfg.PROFILE == "wingman_llm" and "virtualhome" in cfg.SCENES:
         raise SystemExit(
-            "VirtualHome 没有米制深度，WinmanWM 的深度感知头无法运行。"
+            "VirtualHome 没有米制深度，WingmanWM 的深度感知头无法运行。"
             "VH 请用 --profile llm（或在 eval_config.SCENES 中把 virtualhome "
-            "移出 winman_llm 批次）。")
+            "移出 wingman_llm 批次）。")
 
     _preflight()
     specs = env_specs()

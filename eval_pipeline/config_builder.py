@@ -4,7 +4,7 @@
 原则：官方配置不动。我们只做三件事：
   1. 以每个场景官方 config_close_*.yaml 为基底；
   2. 覆盖 model.vlm（换成选中的 GPT/Gemini/Qwen 预设）；
-  3. winman_llm 时追加 memory_probe / world_model 块（targets 自动取自该
+  3. wingman_llm 时追加 memory_probe / world_model 块（targets 自动取自该
      任务的 target_object_types），并打开 depth / instance-segmentation 渲染；
      headless 时按官方 run_benchmark 的做法把 env.platform 设为 CloudRendering。
 """
@@ -36,8 +36,8 @@ def _apply_model_block(data: dict) -> None:
     data["model"]["vlm"] = copy.deepcopy(model_cfg)
 
 
-def _apply_winman_block(data: dict, task: TaskInfo) -> None:
-    wm = cfg.WINMAN_OPTIONS
+def _apply_wingman_block(data: dict, task: TaskInfo) -> None:
+    wm = cfg.WINGMAN_OPTIONS
     targets = [t for t in task.target_types if t]
     data.setdefault("env", {})
     # WorldModel 的 V1 眼睛：真实感知头（RGB+depth），不用语义分割作弊。
@@ -77,8 +77,8 @@ def build_task_config(spec: EnvSpec, task: TaskInfo,
     """生成该任务的运行配置并落盘，返回路径。"""
     data = _base_yaml(spec)
     _apply_model_block(data)
-    if cfg.PROFILE == "winman_llm":
-        _apply_winman_block(data, task)
+    if cfg.PROFILE == "wingman_llm":
+        _apply_wingman_block(data, task)
     _apply_headless(data, spec)
     config_dir = run_dir / "task_configs"
     config_dir.mkdir(parents=True, exist_ok=True)

@@ -4,7 +4,7 @@ LightWM / SpatialWorld unified evaluation - user-editable configuration.
 
 只改这个文件即可完成 90% 的实验配置切换：
   1. SCENES           选择评测哪几类场景（默认三类；去掉一个就只测两类）
-  2. PROFILE          选择模型族（llm / winman_llm / rl）
+  2. PROFILE          选择模型族（llm / wingman_llm / rl）
   3. LLM_PRESET       选择底层 LLM（GPT / Gemini / Qwen ...）
   4. TASK_IDS         选择任务（[] = 测全部；填 id 列表 = 只测这几个）
   5. 其余（输出目录、重试、并行度、是否 golden 复核等）都在下方常量里。
@@ -19,7 +19,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # 1) 场景选择：三类家庭任务场景。要只测两类就删掉其中一行。
 #    可选值：ai2thor / procthor / virtualhome
-#    注意：默认 winman_llm 目前只在 AI2-THOR / ProcTHOR 上可用
+#    注意：默认 wingman_llm 目前只在 AI2-THOR / ProcTHOR 上可用
 #    （VirtualHome 没有米制深度）；测 VH 时请把 PROFILE 改成 "llm"。
 # ---------------------------------------------------------------------------
 SCENES: list[str] = ["ai2thor", "procthor"]
@@ -27,11 +27,11 @@ SCENES: list[str] = ["ai2thor", "procthor"]
 # ---------------------------------------------------------------------------
 # 2) 模型族选择。
 #    llm        : 纯 MLLM（GPT / Gemini / Qwen ...），官方 agent loop
-#    winman_llm : WinmanWM(LightWM 世界模型) + 上述 MLLM，官方 agent loop
+#    wingman_llm : WingmanWM(LightWM 世界模型) + 上述 MLLM，官方 agent loop
 #    rl         : DreamerV3 / DIAMOND 等 RL 策略（见 rl_agents.py 接入说明）
 #    VirtualHome 没有米制深度，目前只能用 llm 评测。
 # ---------------------------------------------------------------------------
-PROFILE: str = "winman_llm"
+PROFILE: str = "wingman_llm"
 
 # ---------------------------------------------------------------------------
 # 3) 底层 LLM 预设。
@@ -83,13 +83,13 @@ LLM_PRESETS: dict = {
 LLM_OVERRIDES: dict = {}
 
 # ---------------------------------------------------------------------------
-# WinmanWM / LightWM 感知权重（winman_llm profile 用）。
+# WingmanWM / LightWM 感知权重（wingman_llm profile 用）。
 # 运行时只吃 RGB+depth+动作日志；语义/位姿元数据在 agent 端已关闭。
 # ---------------------------------------------------------------------------
 PERCEPTION_CKPT: str = (
     "/home/sudidaren/lightwm_phases/checkpoints_local/dense_depth_best.pt"
 )
-WINMAN_OPTIONS: dict = {
+WINGMAN_OPTIONS: dict = {
     # 注意：目标是 per-task 自动从 task.json 的 target_object_types 读入，
     # 不需要在这里手填。下面只是世界模型/门控的运行时选项。
     "variant": "small",      # small@224（本地权重）；云端 336 权重改 "base"
