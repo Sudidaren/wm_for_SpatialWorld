@@ -5,7 +5,7 @@
   1. 以每个场景官方 config_close_*.yaml 为基底；
   2. 覆盖 model.vlm（换成选中的 GPT/Gemini/Qwen 预设）；
   3. wingman_llm 时追加 memory_probe / world_model 块（targets 自动取自该
-     任务的 target_object_types），并打开 depth / instance-segmentation 渲染；
+     任务的 target_object_types），由 RGB 感知模块预测检测框和深度；
      headless 时按官方 run_benchmark 的做法把 env.platform 设为 CloudRendering。
 """
 
@@ -40,9 +40,9 @@ def _apply_wingman_block(data: dict, task: TaskInfo) -> None:
     wm = cfg.WINGMAN_OPTIONS
     targets = [t for t in task.target_types if t]
     data.setdefault("env", {})
-    # WorldModel 的 V1 眼睛：真实感知头（RGB+depth），不用语义分割作弊。
-    data["env"]["render_depth"] = True
-    data["env"]["render_instance_segmentation"] = True
+    # 从 RGB 预测检测框和单目深度，无需模拟器深度或语义分割。
+    data["env"]["render_depth"] = False
+    data["env"]["render_instance_segmentation"] = False
     data["memory_probe"] = {
         "enabled": True,
         "targets": targets or None,
@@ -54,6 +54,9 @@ def _apply_wingman_block(data: dict, task: TaskInfo) -> None:
             "pose_from_action_log": bool(wm.get("pose_from_action_log", True)),
             "pose_initial": wm.get("pose_initial", "origin"),
             "perception_ckpt": cfg.PERCEPTION_CKPT,
+            "perception_runtime_root": wm["perception_runtime_root"],
+            "detector_backend": wm["detector_backend"],
+            "detector_path": wm["detector_path"],
             "variant": wm.get("variant", "small"),
             "resolution": int(wm.get("resolution", 224)),
             "width": int(wm.get("width", 256)),

@@ -151,3 +151,10 @@ summary_by_env_category.csv
 
 未决事项：golden 复核会再启动一次模拟器（每个成功任务约一倍的模拟开销），
 批量跑时可 `--no-verify`；如需完全关闭请把 `VERIFY_GOLDEN_REPLAY=False`。
+
+## 默认感知更新
+
+`wingman_llm` 现在默认使用 RF-DETR Small 检测器和已有单目深度模块，阈值 0.40。
+在各任务 worker 的 Python 环境安装 `../requirements-rfdetr.txt`，并重新应用本仓库的 runtime overlay。
+权重保留在 NFS，通过 `LIGHTWM_STORAGE_ROOT` 或各权重环境变量定位。
+完整说明及结果见 [RF-DETR 感知模块](../docs/perception_rfdetr.md)。此变更不启动或恢复评测任务。

@@ -25,17 +25,34 @@ IMG_MEAN = (0.485, 0.456, 0.406)
 IMG_STD = (0.229, 0.224, 0.225)
 
 
-def build_dinov2(name: str = "dinov2_vits14", device="cpu"):
+def build_dinov2(name: str = "dinov2_vits14", device="cpu", encoder_checkpoint=None):
     """Load DINOv2 via transformers (weights from HF mirror when needed).
 
     Returns (encoder, feature_dim, patch_size).  The encoder output for a
     (B,3,H,W) input is (B, N_patches, D) patch features (CLS is dropped;
     transformers returns last_hidden_state with CLS at index 0).
     """
-    from transformers import Dinov2Model
+    from transformers import Dinov2Model, Dinov2Config
     hf_name = {"dinov2_vits14": "facebook/dinov2-small",
                "dinov2_vitb14": "facebook/dinov2-base"}.get(name, name)
-    model = Dinov2Model.from_pretrained(hf_name)
+    local_encoder = encoder_checkpoint or os.environ.get('LIGHTWM_DINO_ENCODER_CKPT')
+    if local_encoder:
+        # Existing checkpoints include the unchanged pretrained encoder.
+        # Reuse only those tensors; freshly initialize all trainable heads.
+        state = torch.load(local_encoder, map_location='cpu', weights_only=True)
+        state = {k[len('encoder.'):]: v for k, v in state.items()
+                 if k.startswith('encoder.')}
+        dim = state['embeddings.cls_token'].shape[-1]
+        patch = state['embeddings.patch_embeddings.projection.weight'].shape[-1]
+        side = int(math.sqrt(state['embeddings.position_embeddings'].shape[1]-1))
+        expected = 384 if name == 'dinov2_vits14' else 768
+        if dim != expected:
+            raise ValueError('Local frozen encoder does not match requested variant')
+        model = Dinov2Model(Dinov2Config(hidden_size=dim, num_attention_heads=dim//64,
+                                       patch_size=patch, image_size=side*patch))
+        model.load_state_dict(state, strict=True)
+    else:
+        model = Dinov2Model.from_pretrained(os.environ.get("LIGHTWM_DINO_PATH", hf_name))
     for p in model.parameters():
         p.requires_grad_(False)
     dim = model.config.hidden_size
@@ -82,13 +99,14 @@ class PerceptionModel(nn.Module):
     def __init__(self, num_types: int, dim: int = 256, num_slots: int = 16,
                  num_actions: int = 0, num_errors: int = 0,
                  dinov2_name: str = "dinov2_vits14", device="cpu",
-                 img_size: int = 224, head_width: int = 256):
+                 img_size: int = 224, head_width: int = 256,
+                 encoder_checkpoint=None):
         super().__init__()
         self.num_slots = num_slots
         self.dim = dim
         self.img_size = img_size
         self.encoder, enc_dim, self.patch = build_dinov2(
-            dinov2_name, device)
+            dinov2_name, device, encoder_checkpoint=encoder_checkpoint)
         self.grid = img_size // self.patch
         self.register_buffer(
             "img_mean",

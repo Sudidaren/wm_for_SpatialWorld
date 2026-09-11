@@ -652,16 +652,8 @@ def act_node(state: AgentState) -> AgentState:
                                     or '/home/sudidaren/lightwm_phases'
                                 )
                                 sys.path.insert(0, runtime_root)
-                                from phase_b.perception_runtime import (
-                                    PerceptionRuntime)
-                                runtime = PerceptionRuntime(
-                                    ckpt,
-                                    variant=wm_cfg.get('variant', 'small'),
-                                    resolution=int(
-                                        wm_cfg.get('resolution', 224)),
-                                    width=int(wm_cfg.get('width', 256)),
-                                    obj_thr=float(
-                                        wm_cfg.get('obj_thr', 0.35)))
+                                from phase_b.runtime_factory import build_runtime
+                                runtime = build_runtime({**wm_cfg, 'perception_ckpt': ckpt})
                             except Exception as exc:
                                 raise RuntimeError(
                                     f"PerceptionRuntime init failed: {exc}")
