@@ -33,9 +33,14 @@ SCENES = ["ai2thor", "procthor", "virtualhome"]
 SCENES = ["virtualhome"]
 ```
 
-官方单 agent 家庭任务范围：AI2-THOR 282（311 中 29 个为 multi-agent 社交
-任务，走官方 dual 协议，不在这条评测线）+ ProcTHOR 127 + VirtualHome 38，
-合计 447。管线会按 `task_classification_detail.csv` 自动排除 multi-agent 任务。
+官方单 agent 家庭任务范围：AI2-THOR 311 + ProcTHOR 127 + VirtualHome 38，
+合计 **476**（已冻结为 `eval_sets/eval_set_v1.json`）。
+注意：官方分类文件里有 36 个 task_id 同时出现在单 agent 与 multi-agent 两套
+协议里（AI2-THOR 29 + ProcTHOR 7），本管线按"协议"而不是"唯一 id"计数，
+单 agent 集合因此是 476 而不是 440/447。
+
+评测章节草稿与冻结清单见 `docs/evaluation_section_draft.md` 与
+`docs/environment_freeze_checklist.md`。
 
 ```python
 # 任务：[] = 全测；填 id = 只测这几个；TASK_ID_FILTER 可加正则

@@ -73,22 +73,27 @@ def _python_map() -> dict[str, str]:
     return dict(ENV_VENV_PYTHON)
 
 
-def classification_map() -> dict[str, dict]:
-    """task_id -> {environment, category, task_type, instruction}"""
+def classification_map() -> dict[str, list[dict]]:
+    """task_id -> [ {environment, category, task_type, instruction}, ... ].
+
+    同一个 task_id 可能同时出现在单 agent 与 multi-agent 两套协议里
+    （AI2-THOR 29 个、ProcTHOR 7 个），所以这里按 task_id 收集所有行，
+    不能只保留最后一行（否则单 agent 集合会被少算 36 个）。
+    """
     path = Path(SPATIALWORLD_ROOT) / "task_classification_detail.csv"
-    out: dict[str, dict] = {}
+    out: dict[str, list[dict]] = {}
     if not path.exists():
         return out
     with path.open(encoding="utf-8-sig", newline="") as fh:
         for row in csv.DictReader(fh):
             tid = (row.get("task_id") or "").strip()
             if tid:
-                out[tid] = {
+                out.setdefault(tid, []).append({
                     "environment": (row.get("environment") or "").strip(),
                     "category": (row.get("category") or "").strip(),
                     "task_type": (row.get("task_type") or "").strip(),
                     "instruction": (row.get("instruction") or "").strip(),
-                }
+                })
     return out
 
 
@@ -106,9 +111,12 @@ def discover_tasks(env: str, spec: EnvSpec,
         except Exception:
             continue
         tid = str(data.get("task_id") or folder.name)
-        cls = classification.get(tid, {})
-        if cls.get("environment") and cls["environment"] != env:
+        rows = classification.get(tid, [])
+        envs = {r.get("environment") for r in rows}
+        if rows and env not in envs:
             continue
+        cls = next((r for r in rows if r.get("environment") == env),
+                   rows[0] if rows else {})
         # 与官方 load_task_action_count / load_task_metadata 同口径：
         # 优先 task.json 的 golden_actions.steps，否则数非空动作（含 DONE/FAIL）。
         meta = load_task_metadata(task_json)
