@@ -14,15 +14,7 @@ LightWM / SpatialWorld unified evaluation - user-editable configuration.
 
 from __future__ import annotations
 
-import os
-import sys
 from pathlib import Path
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT))
-from phase_b.perception_defaults import perception_defaults
-
-_perception = perception_defaults()
 
 # ---------------------------------------------------------------------------
 # 1) 场景选择：三类家庭任务场景。要只测两类就删掉其中一行。
@@ -90,21 +82,27 @@ LLM_PRESETS: dict = {
 # LLM_OVERRIDES = {"base_url": "https://xxx/v1", "api_key": "sk-..."}
 LLM_OVERRIDES: dict = {}
 
+# 官方基底配置里 enable_subgoal_decomposition=true，且 planner 指向本地
+# localhost:11435（qwen2.5:7b）。本地批量评测时若无该服务，agent 第一步
+# 的子目标分解会一直等待，表现为"卡住不动"。默认关闭；需要时再打开，
+# 并把 planner 指向真实模型（PLANNER_FROM_MAIN_MODEL=True 时自动复用主模型）。
+ENABLE_SUBGOAL_DECOMPOSITION: bool = False
+PLANNER_FROM_MAIN_MODEL: bool = True
+
 # ---------------------------------------------------------------------------
 # WingmanWM / LightWM 感知权重（wingman_llm profile 用）。
-# 运行时由 RGB 预测检测框与深度，并结合动作日志更新空间记忆。
+# 运行时只吃 RGB+depth+动作日志；语义/位姿元数据在 agent 端已关闭。
 # ---------------------------------------------------------------------------
-PERCEPTION_CKPT: str = _perception['perception_ckpt']
+PERCEPTION_CKPT: str = (
+    "/home/sudidaren/lightwm_phases/checkpoints_local/dense_depth_best.pt"
+)
 WINGMAN_OPTIONS: dict = {
     # 注意：目标是 per-task 自动从 task.json 的 target_object_types 读入，
     # 不需要在这里手填。下面只是世界模型/门控的运行时选项。
     "variant": "small",      # small@224（本地权重）；云端 336 权重改 "base"
     "resolution": 224,
     "width": 256,
-    "obj_thr": _perception['obj_thr'],
-    "detector_backend": _perception['detector_backend'],
-    "detector_path": _perception['detector_path'],
-    "perception_runtime_root": str(REPO_ROOT),
+    "obj_thr": 0.35,
     "navigation_directive": True,
     "interact_soft_dist": 1.2,
     "done_gate": True,
@@ -134,7 +132,7 @@ TASK_ID_FILTER: str = ""
 # ---------------------------------------------------------------------------
 # 路径与运行参数
 # ---------------------------------------------------------------------------
-SPATIALWORLD_ROOT: str = os.environ.get("SPATIALWORLD_ROOT", "/home/sudidaren/SpatialWorld")
+SPATIALWORLD_ROOT: str = "/home/sudidaren/SpatialWorld"
 
 # 每个场景使用其官方 uv venv 来执行（保证依赖/模拟器与官方一致）。
 ENV_VENV_PYTHON: dict[str, str] = {
@@ -142,8 +140,6 @@ ENV_VENV_PYTHON: dict[str, str] = {
     "procthor": f"{SPATIALWORLD_ROOT}/envs/procthor/.venv/bin/python",
     "virtualhome": f"{SPATIALWORLD_ROOT}/envs/virtualhome/.venv/bin/python",
 }
-if os.environ.get('LIGHTWM_EVAL_PYTHON'):
-    ENV_VENV_PYTHON = {env: os.environ['LIGHTWM_EVAL_PYTHON'] for env in ENV_VENV_PYTHON}
 
 # 每个场景的官方基准配置（只作为模型块/日志模板的基底）。
 BASE_CONFIG: dict[str, str] = {
