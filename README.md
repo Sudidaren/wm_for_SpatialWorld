@@ -7,6 +7,8 @@ LightWM 是一个"人类式情境顾问"世界模型：**仅凭 RGB 图像与动
 默认感知后端已更新为 **RF-DETR Small 检测 + 已训练单目深度**，合计约 5500 万参数。
 独立测试 F1 72.27%、精确率 80.15%、小物体召回率 60.71%。
 安装、NFS 权重清单和 GPT 配对评测结果见 [RF-DETR 使用说明](docs/perception_rfdetr.md)。
+训练权重已发布到 [GitHub Release](https://github.com/Sudidaren/wm_for_SpatialWorld/releases/tag/perception-rfdetr-small-v1)：检测、深度及类别配置均可公开下载，无需访问我们的 NFS。
+在仓库根目录执行 `export LIGHTWM_STORAGE_ROOT="${LIGHTWM_STORAGE_ROOT:-$PWD}"`、`python scripts/download_rfdetr.py`，然后 `source scripts/selected_perception_env.sh`。
 旧 DINO 检测代码保留用于显式选择和复现；拉取代码不会自动启动任务评测。
 
 ## 总体架构

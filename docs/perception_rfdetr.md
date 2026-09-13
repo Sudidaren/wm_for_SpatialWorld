@@ -10,6 +10,8 @@ Python 3.12 的已验证推理环境：
 
 ```bash
 python -m pip install -r requirements-rfdetr.txt
+export LIGHTWM_STORAGE_ROOT="${LIGHTWM_STORAGE_ROOT:-$PWD}"
+python scripts/download_rfdetr.py
 source scripts/selected_perception_env.sh
 python scripts/check_rfdetr.py
 python scripts/check_rfdetr.py --image /path/to/frame.png --device cuda
@@ -21,8 +23,13 @@ python scripts/check_rfdetr.py --image /path/to/frame.png --device cuda
 本服务器的 RF-DETR 推理环境为
 `/nfs-stor/junchi.yao/2027ICLR/wm_for_spatialworld/envs/rfdetr_1_10_1_probe/bin/python`。
 
-默认存储根目录是 `/nfs-stor/junchi.yao/2027ICLR/wm_for_spatialworld`，可用
-`LIGHTWM_STORAGE_ROOT` 改写。以下文件留在 NFS，不提交大权重到 Git：
+**训练权重已公开发布到 [GitHub Release：perception-rfdetr-small-v1](https://github.com/Sudidaren/wm_for_SpatialWorld/releases/tag/perception-rfdetr-small-v1)**，无需登录或访问我们的 NFS。
+Release 包含检测权重、深度权重、深度配置与类别表，以及 `SHA256SUMS` 和模型清单。
+下载脚本会逐文件检查大小和 SHA256，跳过已校验的文件，并拒绝覆盖内容不匹配的已有权重。
+仅需 Python 标准库即可下载，不需要先安装 PyTorch。
+
+上面的命令将权重存到当前仓库的 `checkpoints/`；也可以先把 `LIGHTWM_STORAGE_ROOT` 设为自己的 NFS 路径。
+本服务器继续使用 `/nfs-stor/junchi.yao/2027ICLR/wm_for_spatialworld`。以下文件与我们实际评测使用的文件逐字节一致：
 
 | 文件 | 相对存储根目录的路径 |
 |---|---|
@@ -30,9 +37,13 @@ python scripts/check_rfdetr.py --image /path/to/frame.png --device cuda
 | 深度权重 | `checkpoints/small_objects_20260910/dense_depth_best.pt` |
 | 深度配置／类别表 | `checkpoints/small_objects_20260910/dense_depth_best.pt.json` |
 
-完整 SHA256、参数量和选择信息见 [权重清单](../configs/rfdetr_small.json)。其他机器需挂载 NFS 或复制这三个文件。
+完整 SHA256、公开下载地址、文件大小、参数量和选择信息见 [权重清单](../configs/rfdetr_small.json)。
 也可通过 `LIGHTWM_DETECTOR_PATH`、`PERCEPTION_CKPT` 分别指定本地路径。
 深度骨干直接从深度检查点加载，不再额外下载 DINOv2 权重。缺少权重时明确报错，不回退到旧检测器。
+
+检测 `.pth` 可以作为 RF-DETR Small 的 `pretrain_weights` 继续微调；它是评测选中的模型权重，
+不是包含优化器状态的训练恢复检查点。深度 `.pt` 包含已有 DINOv2 编码器和已训练的感知头，
+其 `.json` 必须一同保留，以确保分辨率和 117 类名称顺序一致。新数据继续微调时需单独准备对应数据与训练配置。
 
 ## 运行接入
 

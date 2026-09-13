@@ -24,7 +24,7 @@ def main():
     for name, item in manifest['weights'].items():
         path = paths[name].expanduser()
         if not path.is_file():
-            raise FileNotFoundError(f'{name}: {path}; mount/copy the NFS weights described in docs/perception_rfdetr.md')
+            raise FileNotFoundError(f'{name}: {path}; run scripts/download_rfdetr.py with LIGHTWM_STORAGE_ROOT set as described in docs/perception_rfdetr.md')
         if hashlib.sha256(path.read_bytes()).hexdigest() != item['sha256']:
             raise ValueError(f'Weight hash mismatch: {path}')
     output = {'status': 'weights_verified', 'backend': manifest['backend'],

@@ -7,15 +7,21 @@
   "weights": {
     "detector": {
       "relative_path": "checkpoints/rfdetr_small_228094/checkpoint_best_total.pth",
-      "sha256": "c4efd6e43f60b0ed5ee280e8c45422c37ebdc68c64d4a095f14e63280088815a"
+      "sha256": "c4efd6e43f60b0ed5ee280e8c45422c37ebdc68c64d4a095f14e63280088815a",
+      "url": "https://github.com/Sudidaren/wm_for_SpatialWorld/releases/download/perception-rfdetr-small-v1/checkpoint_best_total.pth",
+      "size_bytes": 129072344
     },
     "depth": {
       "relative_path": "checkpoints/small_objects_20260910/dense_depth_best.pt",
-      "sha256": "7324ca1435a5f7d054aaab6037ef3358de873eb8d541be3707ead9ff89129b50"
+      "sha256": "7324ca1435a5f7d054aaab6037ef3358de873eb8d541be3707ead9ff89129b50",
+      "url": "https://github.com/Sudidaren/wm_for_SpatialWorld/releases/download/perception-rfdetr-small-v1/dense_depth_best.pt",
+      "size_bytes": 99678654
     },
     "depth_metadata": {
       "relative_path": "checkpoints/small_objects_20260910/dense_depth_best.pt.json",
-      "sha256": "fed74984dfb9842baee153a9757dc3cff223e6d4aed04da33a8d63b0358b0f75"
+      "sha256": "fed74984dfb9842baee153a9757dc3cff223e6d4aed04da33a8d63b0358b0f75",
+      "url": "https://github.com/Sudidaren/wm_for_SpatialWorld/releases/download/perception-rfdetr-small-v1/dense_depth_best.pt.json",
+      "size_bytes": 94621
     }
   },
   "test_metrics": {
@@ -27,5 +33,6 @@
     "job": 228094,
     "epochs": 20,
     "selected_epoch": 15
-  }
+  },
+  "release_url": "https://github.com/Sudidaren/wm_for_SpatialWorld/releases/tag/perception-rfdetr-small-v1"
 }
