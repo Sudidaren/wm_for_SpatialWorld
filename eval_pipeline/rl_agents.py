@@ -239,8 +239,13 @@ def _final_eval(env_type: str, env, task_config: dict, observation):
     from mllm_base_agent.agent.runner import perform_final_evaluation
 
     try:
+        # 官方函数在 state 不为 None 时会用 state['config']['task'] /
+        # state['env'] / state['observation'] 覆盖入参，因此三者都要放进去。
         ok, score = perform_final_evaluation(
-            state={"config": {"env": {"type": env_type}}},
+            state={"config": {"env": {"type": env_type},
+                              "task": task_config},
+                   "env": env,
+                   "observation": observation},
             env=env, task_config=task_config, observation=observation)
         return bool(ok), float(score)
     except Exception as exc:

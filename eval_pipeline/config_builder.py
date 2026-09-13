@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import copy
 import os
+import zlib
 from pathlib import Path
 
 import yaml
@@ -86,6 +87,19 @@ def _apply_headless(data: dict, spec: EnvSpec) -> None:
     data["env"]["platform"] = "CloudRendering"
 
 
+def _apply_virtualhome_port(data: dict, spec: EnvSpec, task: TaskInfo) -> None:
+    if spec.name != "virtualhome":
+        return
+    base = int(getattr(cfg, "VIRTUALHOME_PORT_BASE", 8100))
+    port = base + (zlib.crc32(task.task_id.encode("utf-8")) % 800)
+    data.setdefault("env", {})
+    data["env"]["port"] = str(port)
+    # 必须提供 X display（不带冒号），否则 wrapper 走 no_graphics 启动，
+    # Unity 后端返回 502。'0' 表示 DISPLAY=:0（WSLg）。
+    display = os.environ.get("DISPLAY", ":0") or ":0"
+    data["env"]["x_display"] = display.lstrip(":")
+
+
 def build_task_config(spec: EnvSpec, task: TaskInfo,
                       run_dir: Path) -> Path:
     """生成该任务的运行配置并落盘，返回路径。"""
@@ -95,6 +109,7 @@ def build_task_config(spec: EnvSpec, task: TaskInfo,
     if cfg.PROFILE == "wingman_llm":
         _apply_wingman_block(data, task)
     _apply_headless(data, spec)
+    _apply_virtualhome_port(data, spec, task)
     config_dir = run_dir / "task_configs"
     config_dir.mkdir(parents=True, exist_ok=True)
     out = config_dir / f"{task.task_id}.yaml"

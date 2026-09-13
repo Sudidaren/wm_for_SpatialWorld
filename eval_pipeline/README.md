@@ -1,5 +1,12 @@
 # SpatialWorld 家庭任务统一评测管线
 
+> **状态：v1.0 FROZEN（2026-09-13）——不要修改。**
+> 判定逻辑、指标口径、状态分类、CSV/统计结构已冻结，冻结前已通过
+> golden 重放与官方 LLM 路径双重验证（见 `FREEZE.md`）。
+> 复现校验：`bash verify_freeze.sh`（要求 3/3 Completed=true）。
+> 官方 ai2thor 加载器所需的最小补丁见
+> `patches/ai2thor_run_task_success_conditions.patch`。
+
 覆盖 **AI2-THOR / ProcTHOR / VirtualHome** 三类场景的官方家庭任务，测试
 LLM 系与 RL 系模型。核心设计：**官方评测逻辑一行不改**，本目录只做四件事：
 

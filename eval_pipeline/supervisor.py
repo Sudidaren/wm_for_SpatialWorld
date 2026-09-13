@@ -372,9 +372,11 @@ def run_single_task(spec: EnvSpec, task: TaskInfo, run_dir: Path,
             continue
 
         outcome["attempts"] += 1
-        # 官方 run_task 会在 run_output_dir/<task_id> 下写结果
-        result_root = attempt_dir / task.task_id
-        result_path = oc.find_result_json(result_root)
+        # 官方 run_task 的输出层级随环境不同：
+        #   AI2-THOR / VirtualHome -> <attempt>/<task_id>/...
+        #   ProcTHOR 单任务        -> <attempt>/...（结果直接写在 attempt 下）
+        result_path = (oc.find_result_json(attempt_dir / task.task_id)
+                       or oc.find_result_json(attempt_dir))
         detail["result_path"] = str(result_path) if result_path else None
         outcome["attempts_detail"].append(detail)
 

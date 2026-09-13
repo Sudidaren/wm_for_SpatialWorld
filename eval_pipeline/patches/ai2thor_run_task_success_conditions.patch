@@ -1,0 +1,39 @@
+diff --git a/scripts/ai2thor/work/run_task.py b/scripts/ai2thor/work/run_task.py
+index fb81647..47f1817 100644
+--- a/scripts/ai2thor/work/run_task.py
++++ b/scripts/ai2thor/work/run_task.py
+@@ -223,6 +223,21 @@ def load_task_from_folder(task_folder_path: str) -> Dict[str, Any]:
+         with open(task_json_path, "r", encoding="utf-8") as f:
+             task_data = json.load(f)
+ 
++        # 官方 evaluator（evaluation.ai2thor create_evaluator_from_config）
++        # 读取的是 success_conditions（复数键）+ success_logic；仅有单数键
++        # 会导致其走 legacy 分支并对 list 调 .get() 抛异常，从而所有任务
++        # 恒判失败。这里把 task.json 的两种写法都归一化。
++        success_condition = task_data.get("success_condition")
++        success_conditions = task_data.get("success_conditions")
++        if success_condition is None:
++            if isinstance(success_conditions, list) and success_conditions:
++                if isinstance(success_conditions[0], dict):
++                    success_condition = success_conditions[0]
++            elif isinstance(success_conditions, dict):
++                success_condition = success_conditions
++        if success_conditions is None and isinstance(success_condition, dict):
++            success_conditions = [success_condition]
++
+         task_config = {
+             "name": task_data.get("task_id", task_folder.name),
+             "scene": task_data.get("scene", "FloorPlan1"),
+@@ -231,8 +246,11 @@ def load_task_from_folder(task_folder_path: str) -> Dict[str, Any]:
+             "description": task_data.get(
+                 "target_description", task_data.get("instruction", "")
+             ),
++            "golden_actions": task_data.get("golden_actions"),
+             "target_object_types": task_data.get("target_object_types", []),
+-            "success_condition": task_data.get("success_conditions", []),
++            "success_condition": success_condition,
++            "success_conditions": success_conditions,
++            "success_logic": task_data.get("success_logic", "AND"),
+             "max_steps": resolve_max_steps_from_task(task_data, 50),
+             "task_folder_path": str(task_folder.absolute()),
+             "task_id": task_data.get("task_id", task_folder.name),

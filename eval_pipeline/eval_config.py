@@ -60,7 +60,8 @@ LLM_PRESETS: dict = {
     },
     "gemini-3.1-pro": {
         "provider": "openai",
-        "model_name": "Gemini-3.1-Pro-Preview",
+        # 网关（apic1.ohmycdn.com）只认小写 id：gemini-3.1-pro-preview
+        "model_name": "gemini-3.1-pro-preview",
         "temperature": 1.0,
         "top_p": 0.9,
         "max_tokens": 4096,
@@ -88,6 +89,10 @@ LLM_OVERRIDES: dict = {}
 # 并把 planner 指向真实模型（PLANNER_FROM_MAIN_MODEL=True 时自动复用主模型）。
 ENABLE_SUBGOAL_DECOMPOSITION: bool = False
 PLANNER_FROM_MAIN_MODEL: bool = True
+
+# VirtualHome 每个任务会自启一个 Unity 后端并监听固定端口；并行时必须按
+# 任务分配不同端口，避免端口冲突。
+VIRTUALHOME_PORT_BASE: int = 8100
 
 # ---------------------------------------------------------------------------
 # WingmanWM / LightWM 感知权重（wingman_llm profile 用）。
