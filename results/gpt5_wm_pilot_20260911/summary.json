@@ -1,0 +1,81 @@
+{
+  "scope": "Historical 20-task pilot; 17 decided pairs; not the full benchmark",
+  "model": "gpt-5",
+  "detector": "OWLv2 + DINO monocular depth",
+  "perception_parameters": 177720649,
+  "new_rfdetr_task_evaluation": false,
+  "all": {
+    "paired_n": 17,
+    "left_total": 20,
+    "right_total": 17,
+    "unpaired_or_external": 3,
+    "gpt_success_rate": 0.11764705882352941,
+    "wm_gpt_success_rate": 0.4117647058823529,
+    "delta_success_pp": 29.41176470588235,
+    "wm_wins": 5,
+    "wm_losses": 0,
+    "mcnemar_exact_two_sided_p": 0.0625,
+    "token_paired_n": 17,
+    "steps_saved_on_joint_success": -1,
+    "mean_extra_seconds": 64.8,
+    "mean_extra_tokens": 41348.82352941176
+  },
+  "by_env": {
+    "ai2thor": {
+      "paired_n": 10,
+      "left_total": 10,
+      "right_total": 10,
+      "unpaired_or_external": 0,
+      "gpt_success_rate": 0.2,
+      "wm_gpt_success_rate": 0.7,
+      "delta_success_pp": 50.0,
+      "wm_wins": 5,
+      "wm_losses": 0,
+      "mcnemar_exact_two_sided_p": 0.0625,
+      "token_paired_n": 10,
+      "steps_saved_on_joint_success": -1,
+      "mean_extra_seconds": -67.7,
+      "mean_extra_tokens": -42935.5
+    },
+    "procthor": {
+      "paired_n": 7,
+      "left_total": 10,
+      "right_total": 7,
+      "unpaired_or_external": 3,
+      "gpt_success_rate": 0,
+      "wm_gpt_success_rate": 0,
+      "delta_success_pp": 0.0,
+      "wm_wins": 0,
+      "wm_losses": 0,
+      "mcnemar_exact_two_sided_p": 1.0,
+      "token_paired_n": 7,
+      "steps_saved_on_joint_success": null,
+      "mean_extra_seconds": 254.0857142857143,
+      "mean_extra_tokens": 161755
+    }
+  },
+  "baseline_cohort": {
+    "n": 20,
+    "successes": 2,
+    "ai2thor_tasks_by_perception_split": {
+      "train": 8,
+      "val": 2,
+      "test": 0
+    },
+    "split_file_sha256": "57b8fd3611efc10703f2a302de295929f2657be6797adf05b3b5fe87b9e66f6c"
+  },
+  "excluded_tasks": [
+    {
+      "env": "procthor",
+      "task_id": "procthor402"
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor408"
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor502"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "README.md": "a656ba63ce4d1383aaf49899016c094bbfac1d7f8a5d46556c8bb0f3d7d067ce",
+  "paired_tasks.csv": "8bdf10c03bc3cbc49c3c52080d3fba445be1438643bdb2a275cb6c95cf217dd6",
+  "provenance.json": "e8773eb220ed84c42ae6eae62dc137f65f98c26f41aea11164ef34f6a1118e79",
+  "selected_cohort.csv": "a0497dc7b7021755a4774815477d79fb10c202e81c67ae70d0735fbbcaff52ac",
+  "summary.json": "33603c892359007a36c5ec06d32e125e1c3d0e9d64f0f18ec9617d3428e0a4c5",
+  "verify_results.py": "37b12f8b5a353036e5c6b44edd53b4f9243dd107f244d9187a3013caefa3fd17"
+}

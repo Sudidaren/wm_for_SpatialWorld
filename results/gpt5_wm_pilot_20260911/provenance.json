@@ -1,0 +1,224 @@
+{
+  "source_snapshot": "completed_17 (closed 2026-09-11 local time)",
+  "source_report_sha256": "9eb94bd71ac4060d95fa2acf7ee0b43083d5ed6714c263f984f341b422422414",
+  "export_policy": "Allowlisted result fields only; original outcome, steps, duration and usage values preserved. Missing WM outcomes remain missing. No raw prompts, credentials or local runtime configuration exported.",
+  "verified_archive_artifacts": [
+    {
+      "path": "action_feedback.json",
+      "sha256": "aed378c5ff0ecefcd2ce3e639f7693c231596910623fd2018579c714d780b9bf"
+    },
+    {
+      "path": "action_feedback.md",
+      "sha256": "7b270dc050de9192124afda78f718817c2eef886fea62d5d7103394fd168436e"
+    },
+    {
+      "path": "action_translation_audit.json",
+      "sha256": "dfaab2ce11f50700b322f518653804e6d7e127b28fd237227474f12c53442366"
+    },
+    {
+      "path": "baseline/state.json",
+      "sha256": "1b9b6afb88ff02ae631058aba73d64ee6fd10a93f8e63251f45bcd62644b4b55"
+    },
+    {
+      "path": "closure.json",
+      "sha256": "256e8471778a42219507b4a6c1f53df92f80d784ce8195e9ea21186f06106ddf"
+    },
+    {
+      "path": "report.json",
+      "sha256": "9eb94bd71ac4060d95fa2acf7ee0b43083d5ed6714c263f984f341b422422414"
+    },
+    {
+      "path": "report.md",
+      "sha256": "bf7ed79d7ccd1654a4dd0e0e5f53669ab06872d2073ecab7859f57e3db5182a4"
+    },
+    {
+      "path": "selection_manifest.json",
+      "sha256": "3a40c114c73f05e13ec20f95dff61055a16e6d74f502aeda2e2ca936ab51e5b0"
+    },
+    {
+      "path": "source_hashes.json",
+      "sha256": "c4345b5143561a00134323f872b4b3bf7eb6c0d9d131ba434ff26659b8c7da1c"
+    },
+    {
+      "path": "wm/state.json",
+      "sha256": "87f4f96b8d2516d6e053e03166f5f8bebe62b7edd78eab15da030f07b50d8bff"
+    },
+    {
+      "path": "wm_plan.json",
+      "sha256": "e989e9e78b5d009d85b6d6b25515ee444f95905e8f2d4a0baef5dc8a4a857159"
+    }
+  ],
+  "verified_original_source_file_count": 102,
+  "source_hash_manifest_sha256": "c4345b5143561a00134323f872b4b3bf7eb6c0d9d131ba434ff26659b8c7da1c",
+  "selection_rule": "Smallest SHA-256 ranks within each environment among completed baseline tasks; success outcomes are not used to rank or select.",
+  "selection_salt": "wm-small-paired-pilot-20260911-v1",
+  "selected_task_identity": [
+    {
+      "env": "ai2thor",
+      "task_id": "ai2thor05031",
+      "task_identity": {
+        "task_sha256": "5d33f742fb0e9b2dffd34f851f27149bd8fb9958e2604d11c0efa0ec26d289cd",
+        "init_sha256": "3e7f26bf9d18ff0e6dc1ab9249995c4971afd006434b2b8db7da852994b1b1dc"
+      }
+    },
+    {
+      "env": "ai2thor",
+      "task_id": "ai2thor05524",
+      "task_identity": {
+        "task_sha256": "90a1ff62c0ae505ba5a014c35936e8e685833cb04b55b70c2802671b93ef15a8",
+        "init_sha256": "591f7953248596ce0643bb65eb3b6a3746903de1221eb50646a716f4d0fee7ac"
+      }
+    },
+    {
+      "env": "ai2thor",
+      "task_id": "ai2thor04112",
+      "task_identity": {
+        "task_sha256": "a175b2e31edc83734ce3a13452eb873eb61fa344191bf271d7ee06590c5c4970",
+        "init_sha256": "3d91fb0e221cf420ff3c5c6db6340a9558a60771c770fda7f5943f8b6ab1eebf"
+      }
+    },
+    {
+      "env": "ai2thor",
+      "task_id": "ai2thor05055",
+      "task_identity": {
+        "task_sha256": "a51ea1f08f9e0aa3577cc2bddf097c5952093dd9b205da7ae54e94b0c76f9f8e",
+        "init_sha256": "5e471f532e226f2c69e9b57a9d3428c747824256c34c731af80efd20ec93231d"
+      }
+    },
+    {
+      "env": "ai2thor",
+      "task_id": "ai2thor05567",
+      "task_identity": {
+        "task_sha256": "2b2d411f10db0f51eb711661e54d6e6f788b0b224ec25a5de394764a15edcdf4",
+        "init_sha256": "e10ae3457ed047c208b0d354f598a4acb67285b2c24087eecdef63d4d7586cf9"
+      }
+    },
+    {
+      "env": "ai2thor",
+      "task_id": "ai2thor04062",
+      "task_identity": {
+        "task_sha256": "4df4623e8d9defd43ec3856fcb3347aa18387c7ebe86a42da6110f7933fc1809",
+        "init_sha256": "5db81b3bbb6674f312bab122fe9a22489a3b41e7089f8b87c5d70123f70a4ff8"
+      }
+    },
+    {
+      "env": "ai2thor",
+      "task_id": "ai2thor05577",
+      "task_identity": {
+        "task_sha256": "2edc7e90b7b1333da9a0315c2ff3e4f52fc11ad2d600d8cd5d961b9e5e920955",
+        "init_sha256": "58c565472b83533a1b3d18526eb3481cb431bb4d5e2b3aa95df2bc2d1b0f3f7a"
+      }
+    },
+    {
+      "env": "ai2thor",
+      "task_id": "ai2thor04047",
+      "task_identity": {
+        "task_sha256": "63eb67c8986efa08a7e397c20454ae905cb67b31e39444f865a300cc588fd7b9",
+        "init_sha256": "5cf538391b3647adb5540757022904ee9a960e87686ca545e499da2846d805cb"
+      }
+    },
+    {
+      "env": "ai2thor",
+      "task_id": "ai2thor05536",
+      "task_identity": {
+        "task_sha256": "b9add622090af06c4b03815f3f10beddaffea5431b3d0dc08ccd8f95a5007a02",
+        "init_sha256": "7ec3f3307ce1f22dc8304e30335fdf24f90ca77375008b92d02f07fad5a110f8"
+      }
+    },
+    {
+      "env": "ai2thor",
+      "task_id": "ai2thor03025",
+      "task_identity": {
+        "task_sha256": "53e63e51383407df8e89576ede91f3e88fe99622a7aabbde1670606fceced208",
+        "init_sha256": "e3ccc84c9257dafdd075d0c7e370048329e7b482916bba5351ae9d44403d6307"
+      }
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor004",
+      "task_identity": {
+        "task_sha256": "1adadcc98bbe411ded0c4c284c44eda80e3b9d71a0f3eee9d6fc85c30a7fe8e6",
+        "init_sha256": null
+      }
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor202",
+      "task_identity": {
+        "task_sha256": "25c44dc18471020cac92184992fb7158c17b6ae5434e1420a149d89b3592be70",
+        "init_sha256": null
+      }
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor502",
+      "task_identity": {
+        "task_sha256": "55c8c88c3c57e0db722bc6664a249a5e98b3d993a27270dc2290b6138235aa58",
+        "init_sha256": null
+      }
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor309",
+      "task_identity": {
+        "task_sha256": "f9c47811983d103884406965f38f5fe50bbea263fbf9b7c08736c8777ab029d1",
+        "init_sha256": null
+      }
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor302",
+      "task_identity": {
+        "task_sha256": "85807023e873433eaf85dbc31bee8c9d5f5fbe2923071b5d8c98a41cece8a211",
+        "init_sha256": null
+      }
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor119",
+      "task_identity": {
+        "task_sha256": "828b6eabcd8e4a12758d3fe9dd29dfcfd713b585acc6c1ad349da098d1c9c820",
+        "init_sha256": null
+      }
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor301",
+      "task_identity": {
+        "task_sha256": "5db51d1e3d6698149f337c5b412da62b33b15215d38c058176bfc055a3449ba1",
+        "init_sha256": null
+      }
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor402",
+      "task_identity": {
+        "task_sha256": "48869d161b83fa9293aed3caaa4ecee12771b68f3f5e5776c9a9d4b50c3f5111",
+        "init_sha256": null
+      }
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor303",
+      "task_identity": {
+        "task_sha256": "36f207dab322df0f5b38223c46b6ac524945c0e1ac9f71d7b1149a4d331ac1bb",
+        "init_sha256": null
+      }
+    },
+    {
+      "env": "procthor",
+      "task_id": "procthor408",
+      "task_identity": {
+        "task_sha256": "9ab92c87a9c984480a805b53840027145bcec223fb0a075c3e249d914ff82b63",
+        "init_sha256": null
+      }
+    }
+  ],
+  "historical_wm_settings": {
+    "obj_thr": 0.15,
+    "detector_backend": "owlv2",
+    "done_gate": false,
+    "pose_from_action_log": true,
+    "pose_initial": "origin"
+  }
+}

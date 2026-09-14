@@ -11,6 +11,8 @@ LightWM 是一个"人类式情境顾问"世界模型：**仅凭 RGB 图像与动
 在仓库根目录执行 `export LIGHTWM_STORAGE_ROOT="${LIGHTWM_STORAGE_ROOT:-$PWD}"`、`python scripts/download_rfdetr.py`，然后 `source scripts/selected_perception_env.sh`。
 旧 DINO 检测代码保留用于显式选择和复现；拉取代码不会自动启动任务评测。
 
+GPT-5 与 WM+GPT-5 的历史小样本评测已公开：[结果表、逐任务 CSV 和复算脚本](results/gpt5_wm_pilot_20260911/README.md)。17 对任务分别成功 2 个和 7 个；这批使用旧 OWLv2 感知模块，详细限制见结果页。
+
 ## 总体架构
 
 ```
