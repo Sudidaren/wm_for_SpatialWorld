@@ -111,6 +111,32 @@ class PoseIntegrationTest(unittest.TestCase):
         wm._integrate_pose(act("LookDown", degrees=30), None)
         self.assertEqual(wm._pose, [0.0, 0.0, 0.0, 0.0])
 
+    def test_look_actions_track_camera_horizon(self):
+        """The pitch must be recorded even though it does not translate the
+        agent: every unprojection depends on it (79% of the AI2-THOR tasks
+        start with a LookDown).  AI2-THOR sign convention: +=down."""
+        wm = make_wm()
+        wm._horizon = 0.0
+        wm._integrate_pose(act("LookDown"), None)         # default 30 deg
+        self.assertAlmostEqual(wm._horizon, 30.0)
+        wm._integrate_pose(act("LookUp"), None)
+        self.assertAlmostEqual(wm._horizon, 0.0)
+        wm._integrate_pose(act("LookDown", degrees=45), None)
+        self.assertAlmostEqual(wm._horizon, 45.0)
+        for _ in range(4):
+            wm._integrate_pose(act("LookDown"), None)
+        self.assertAlmostEqual(wm._horizon, 60.0)         # clamped
+        for _ in range(6):
+            wm._integrate_pose(act("LookUp"), None)
+        self.assertAlmostEqual(wm._horizon, -60.0)
+
+    def test_camera_sits_one_camera_height_above_the_agent(self):
+        wm = make_wm()
+        wm._pose = [0.0, 0.0, 0.0, 0.0]
+        pos, rot = wm._resolve_pose(None, None)
+        self.assertAlmostEqual(wm._camera_xyz(pos, rot)[1], wm_mod.CAMERA_Y)
+        self.assertIn("horizon", rot)
+
     def test_landmark_correction_removes_drift(self):
         wm = make_wm()
         wm._pose = [0.0, 0.0, 0.0, 0.0]

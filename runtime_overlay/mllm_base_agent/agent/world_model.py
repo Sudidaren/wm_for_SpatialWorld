@@ -30,6 +30,39 @@ except ImportError:                      # script / flat import fallback
     from self_observation import MOVE_ACTIONS
 
 
+#: AI2-THOR default camera height above the agent's body root.  The agent
+#: never changes height (no vertical movement), so this is a constant, not
+#: something to integrate -- ``_pose[1]`` stays 0 and the camera sits at
+#: ``CAMERA_Y`` above it.
+CAMERA_Y = 0.675
+
+#: AI2-THOR clamps cameraHorizon to this range (degrees).
+HORIZON_LIMIT = 60.0
+
+#: LookUp/LookDown without an explicit angle move by this much.
+DEFAULT_LOOK_DEGREES = 30.0
+
+
+def camera_basis(yaw: float, horizon: float = 0.0):
+    """Return (forward, right, up) unit vectors in the world frame.
+
+    Mirrors ``shared/geometry.camera_basis`` (the project's validated
+    projection convention) so the runtime and the offline libraries agree.
+
+    ``horizon`` is AI2-THOR's ``cameraHorizon`` in degrees: **positive =
+    looking down**, negative = looking up.
+    """
+    rad = math.radians(float(yaw))
+    fwd_h = np.array([math.sin(rad), 0.0, math.cos(rad)])
+    right = np.array([math.cos(rad), 0.0, -math.sin(rad)])
+    up = np.array([0.0, 1.0, 0.0])
+    th = math.radians(-float(horizon or 0.0))
+    if abs(th) > 1e-9:
+        c, s = math.cos(th), math.sin(th)
+        return fwd_h * c + up * s, right, up * c - fwd_h * s
+    return fwd_h, right, up
+
+
 def _load_rgb(image_path: Optional[str]):
     """Load the exact RGB frame the frozen MLLM was shown for this step."""
     if not image_path or not os.path.isfile(image_path):
@@ -89,6 +122,10 @@ class WorldModel:
         self._states: Dict[str, dict] = {}  # oid -> {state_field: bool}
         self._visited: set = set()               # agent cells (walkable)
         self._pose: Optional[List[float]] = None  # [x, y, z, yaw] self-built
+        #: AI2-THOR cameraHorizon in degrees (positive = looking down).
+        #: Without this the agent's pitch was silently dropped and every
+        #: anchor seen while looking down came out too far / too high.
+        self._horizon = 0.0
         self._blocked_from_moves: set = set()    # move-failure target cells
         self._step = 0
         self._pose_sigma = 0.0          # odometry uncertainty (meters)
@@ -366,12 +403,10 @@ class WorldModel:
         cam = self._camera_xyz(agent_pos, agent_rot)
         fx = (self.width / 2.0) / math.tan(math.radians(self.fov / 2.0))
         cx, cy = self.width / 2.0, self.height / 2.0
-        yaw = math.radians(float(agent_rot.get("y", 0.0)))
-        fwd = np.array([math.sin(yaw), 0.0, math.cos(yaw)])
-        right = np.array([math.cos(yaw), 0.0, -math.sin(yaw)])
-        up = np.array([0.0, 1.0, 0.0])
+        fwd, right, up = camera_basis(float(agent_rot.get("y", 0.0)),
+                                      float(agent_rot.get("horizon", 0.0) or 0.0))
         x_rel = (u - cx) * z / fx
-        y_rel = (v - cy) * z / fx
+        y_rel = (cy - v) * z / fx
         ray = right * x_rel + up * y_rel + fwd * z
         n = float(np.linalg.norm(ray))
         if n <= 1e-9:
@@ -399,7 +434,7 @@ class WorldModel:
 
     def _camera_xyz(self, agent_pos, agent_rot) -> np.ndarray:
         return np.array([float(agent_pos.get("x") or 0.0),
-                         float(agent_pos.get("y") or 0.0),
+                         float(agent_pos.get("y") or 0.0) + CAMERA_Y,
                          float(agent_pos.get("z") or 0.0)])
 
     @staticmethod
@@ -466,7 +501,8 @@ class WorldModel:
             self._pose = [0.0, 0.0, 0.0, 0.0]
         self._integrate_pose(action, moved)
         x, y, z, yaw = self._pose
-        return {"x": x, "y": y, "z": z}, {"y": yaw}
+        return ({"x": x, "y": y, "z": z},
+                {"y": yaw, "horizon": self._horizon})
 
     def _integrate_pose(self, action: Optional[Dict],
                         moved: Optional[bool] = None) -> None:
@@ -481,7 +517,19 @@ class WorldModel:
         if not name:
             return
         if name in ("LookUp", "LookDown"):
-            return                      # look angle does not move the agent
+            # The pitch does not translate the agent, but it *does* rotate the
+            # camera, and every unprojection depends on it: 79% of the AI2-THOR
+            # tasks begin with a LookDown.  Positive horizon = looking down.
+            try:
+                deg = float(action.get("degrees")
+                            or action.get("magnitude")
+                            or DEFAULT_LOOK_DEGREES)
+            except (TypeError, ValueError):
+                deg = DEFAULT_LOOK_DEGREES
+            delta = deg if name == "LookDown" else -deg
+            self._horizon = max(-HORIZON_LIMIT,
+                                min(HORIZON_LIMIT, self._horizon + delta))
+            return
         if self._pose is None:
             return
         x, _y, z, yaw = self._pose
@@ -552,21 +600,27 @@ class WorldModel:
         return (0, 0)
 
     def _unproject(self, u, v, z, agent_pos, agent_rot) -> List[float]:
+        """Pixel + metric depth -> world point.
+
+        Uses the same camera model as ``shared/geometry.unproject``:
+        camera at ``agent + (0, CAMERA_Y, 0)``, basis rotated by the agent's
+        yaw **and** its camera horizon, and the vertical pixel offset measured
+        *upwards* from the principal point (``cy - v``).  Until 2026-09-17
+        this function dropped the pitch, ignored the camera height, and used
+        the flipped sign -- measured against recorded ground truth on the
+        coverage sweep that cost a median 1.01 m of 3D error at 30 deg pitch
+        (see tools/eval_projection_accuracy.py).
+        """
         fx = (self.width / 2.0) / math.tan(math.radians(self.fov / 2.0))
         fy = fx
         cx, cy = self.width / 2.0, self.height / 2.0
-        # scale pixel coords to the actual seg frame size
         x_rel = (u - cx) * z / fx
-        y_rel = (v - cy) * z / fy
-        z_rel = z
-        yaw = math.radians(float(agent_rot.get("y", 0.0)))
-        fwd = (math.sin(yaw), math.cos(yaw))
-        right = (math.cos(yaw), -math.sin(yaw))
-        return [
-            (agent_pos.get("x") or 0) + right[0] * x_rel + fwd[0] * z_rel,
-            (agent_pos.get("y") or 0) + y_rel,
-            (agent_pos.get("z") or 0) + right[1] * x_rel + fwd[1] * z_rel,
-        ]
+        y_rel = (cy - v) * z / fy
+        fwd, right, up = camera_basis(float(agent_rot.get("y", 0.0)),
+                                      float(agent_rot.get("horizon", 0.0) or 0.0))
+        cam = self._camera_xyz(agent_pos, agent_rot)
+        point = cam + right * x_rel + up * y_rel + fwd * z
+        return [float(point[0]), float(point[1]), float(point[2])]
 
     def _hand_position(self, agent_pos, agent_rot) -> List[float]:
         yaw = math.radians(float(agent_rot.get("y", 0.0)))
@@ -759,6 +813,7 @@ class WorldModel:
             "_visited": sorted(self._visited),
             "_blocked_from_moves": sorted(self._blocked_from_moves),
             "_pose": list(self._pose) if self._pose else None,
+            "_horizon": self._horizon,
         }
         payload = self._jsonable(data)
         tmp = f"{path}.tmp"
@@ -838,6 +893,7 @@ class WorldModel:
         wm._pose = (
             [float(v) for v in data["_pose"]] if data.get("_pose") else None
         )
+        wm._horizon = float(data.get("_horizon") or 0.0)
         wm._blocked_from_moves = {
             tuple(c) for c in data.get("_blocked_from_moves") or []
         }

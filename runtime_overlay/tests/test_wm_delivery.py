@@ -26,6 +26,7 @@ the evidence that the published repo reproduces the intended behaviour.
 from __future__ import annotations
 
 import ast
+import math
 import os
 import re
 import sys
@@ -353,6 +354,54 @@ def test_world_model_refuses_simulator_pose():
     except ValueError:
         return
     raise AssertionError("pose_from_action_log=False must be refused")
+
+
+def test_camera_model_round_trips_ground_truth():
+    """Project a world point with the project's convention, then unproject it
+    with the runtime: must return the same point at every camera pitch.
+
+    This is the check that the 2026-09-17 camera fix is about.  Before it, the
+    runtime dropped the pitch, ignored the camera height and had the vertical
+    sign flipped (measured at a median 1.01 m of 3D error at 30 deg pitch on
+    the coverage sweep -- tools/eval_projection_accuracy.py).
+    """
+    import numpy as np
+
+    from mllm_base_agent.agent import world_model as wm_mod
+
+    wm = wm_mod.WorldModel(width=800, height=600, fov=60.0)
+    fx = (800 / 2.0) / math.tan(math.radians(30.0))
+    worst = 0.0
+    for horizon in (0.0, 30.0, -30.0, 60.0):
+        cam = np.array([1.0, wm_mod.CAMERA_Y, 2.0])
+        fwd, right, up = wm_mod.camera_basis(0.0, horizon)
+        for target in (np.array([1.0, 0.8, 4.0]),     # ahead and low
+                       np.array([2.2, 1.4, 3.0]),     # right and high
+                       np.array([0.1, 0.2, 4.5])):    # left and low
+            d = target - cam
+            z = float(np.dot(d, fwd))
+            u = 400.0 + fx * float(np.dot(d, right)) / z
+            v = 300.0 - fx * float(np.dot(d, up)) / z
+            back = np.array(wm._unproject(
+                u, v, z, {"x": 1.0, "y": 0.0, "z": 2.0},
+                {"y": 0.0, "horizon": horizon}))
+            worst = max(worst, float(np.linalg.norm(back - target)))
+    assert worst < 1e-6, f"camera model does not round-trip: worst {worst:.6f} m"
+
+
+def test_camera_height_and_vertical_sign():
+    from mllm_base_agent.agent import world_model as wm_mod
+
+    wm = wm_mod.WorldModel(width=800, height=600, fov=60.0)
+    centre = wm._unproject(400.0, 300.0, 2.0,
+                           {"x": 0.0, "y": 0.0, "z": 0.0}, {"y": 0.0})
+    assert abs(centre[0]) < 1e-9, centre
+    assert abs(centre[1] - wm_mod.CAMERA_Y) < 1e-9, centre
+    assert abs(centre[2] - 2.0) < 1e-9, centre
+    # a pixel *below* the image centre is physically lower than the camera
+    low = wm._unproject(400.0, 400.0, 2.0,
+                        {"x": 0.0, "y": 0.0, "z": 0.0}, {"y": 0.0})
+    assert low[1] < wm_mod.CAMERA_Y, low
 
 
 def test_world_model_checkpoint_round_trip():
