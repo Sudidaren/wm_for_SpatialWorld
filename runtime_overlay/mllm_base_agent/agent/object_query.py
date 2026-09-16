@@ -65,9 +65,10 @@ def extract_action_string(response_text: str) -> str:
 def parse_query(action_string: str) -> Optional[str]:
     """``CheckState()`` (or any ``Query(...)``) -> the summary sentinel.
 
-    The generic per-object query is gone, so every accepted spelling means the
-    same thing: "show me what you remember".  Keeping ``Query(<name>)`` valid
-    avoids burning a parse-error retry if the model still uses the old habit.
+    Every accepted spelling means the same thing: "show me what you remember".
+    ``Query(<name>)`` is accepted as an alias of ``CheckState()`` so that a
+    model that spells the request that way still gets the summary instead of
+    burning a parse-error retry.
     """
     plain = re.sub(r"\s+", " ", (action_string or "").strip().rstrip(".")).strip()
     if _CHECK_ACTION_RE.match(plain):

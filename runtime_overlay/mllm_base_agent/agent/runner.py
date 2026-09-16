@@ -640,8 +640,8 @@ def act_node(state: AgentState) -> AgentState:
                                 raise RuntimeError(
                                     f"PerceptionRuntime init failed: {exc}")
                             wm.attach_perception(runtime)
-                            # 注意：不再把检测器的类别表交给 MemoryProbe
-                            # （基线没有词表，WM 臂也不能用；目标物名字由模型自述）
+                            # 检测器的类别表不交给 MemoryProbe：提示里的物体
+                            # 名字由模型自己开局说一次（无词表、无菜单）。
                     raw_meta = wm.observe(
                         observation,
                         action=action,
@@ -771,12 +771,12 @@ def evaluate_node(state: AgentState) -> AgentState:
         success, _score = perform_final_evaluation(state)
         state['success'] = success
         state['fail_reason'] = None if success else 'Model claimed DONE but success conditions not met'
-        # REMOVED 2026-09-15 (information isolation): the DONE gate used to
-        # block a wrong DONE and tell the model which success conditions were
-        # still unmet.  That reads (a) the task's formal success predicate from
-        # task.json and (b) the simulator's object metadata -- neither of which
-        # the frozen MLLM ever sees, so it was an oracle.  A wrong DONE is now
-        # simply a failure, exactly as in the official baseline.
+        # DONE is never intercepted: the episode ends, the harness evaluates it
+        # and a wrong DONE is simply a failure, exactly as in the official
+        # baseline.  Nothing tells the model which success conditions are
+        # still unmet -- that would require reading the task's formal success
+        # predicate and the simulator's object metadata, neither of which the
+        # frozen MLLM ever sees.
         state['should_continue'] = False
         return state
     if state.get('task_fail_by_model'):

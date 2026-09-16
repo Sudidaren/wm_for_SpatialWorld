@@ -134,18 +134,17 @@ class WorldModel:
         # snap everything back.  A "place" is the L2-normalised DINOv2 CLS of
         # the frame the agent was shown -- RGB only, no simulator data.
         self.loop_closure = True
-        # Guards tuned after an in-sim test showed the naive settings firing on
-        # 8/30 steps with oscillating +-0.6 m "corrections": while the agent
-        # spins in place the same view recurs, cos -> 1.000, and a 0.3 m odom
-        # gap is meaningless.  A correction is now only accepted when the
-        # agent has genuinely travelled away and come back.
+        # Guards against the two ways this goes wrong: while the agent spins in
+        # place the same view recurs with cos -> 1.000 and a meaningless pose
+        # gap, and a look-alike room can match just as well as a real revisit.
+        # A correction is therefore only accepted when the agent has genuinely
+        # travelled away and come back, and only for a bounded amount.
         self.lc_sim_thr = 0.985       # cosine similarity that declares a revisit
         #: m of *path* (odometry travel) that must separate the two visits.
-        #: This used to be a test on the pose gap between the current pose and
-        #: the stored keyframe -- but that gap *is* the drift we are trying to
-        #: correct, and it was paired with ``lc_max_correction = 1.0``, so the
-        #: accepted window was empty and loop closure never fired once in
-        #: production (0 hits across the three eval boxes, 2026-09-17).
+        #: Measuring "have I really been away and come back?" by travelled
+        #: path -- rather than by the pose gap to the stored keyframe, which is
+        #: the very drift being corrected -- keeps a spin-in-place from
+        #: triggering a correction.
         self.lc_min_path = 2.0
         self.lc_min_step_gap = 12
         self.lc_keyframe_dist = 0.75  # m; min travel before storing a keyframe
@@ -198,8 +197,9 @@ class WorldModel:
         ax, az = agent_pos.get("x"), agent_pos.get("z")
         if ax is not None and az is not None:
             self._visited.add((round(ax / 0.25), round(az / 0.25)))
-            # A move that did NOT change the view is treated as blocked; this
-            # replaces the old ``error_message``-based marking.
+            # A locomotion action whose frame did not change is treated as
+            # blocked: the cell directly ahead is remembered so the hint can
+            # tell the model to go around.
             if (moved is False and action_name in MOVE_ACTIONS):
                 cur_agent = (round(ax / 0.25), round(az / 0.25))
                 dcx, dcz = self._move_dir(action_name, float(agent_rot.get("y", 0.0)))
@@ -488,24 +488,17 @@ class WorldModel:
         self._pose_sigma = max(0.0, self._pose_sigma - 0.05)
 
     # ------------------------------------------------------------------
-    # REMOVED 2026-09-15 (information isolation):
-    #   _update_affordances / _is_non_affordance_error / affordance /
-    #   affordance_summary -- these learned whether an action "works" on an
-    #   object type from the simulator's success flag, which the frozen MLLM
-    #   never sees.  Nothing may be inferred from action outcomes any more.
-
-    # ------------------------------------------------------------------
     def _resolve_pose(self, action: Optional[Dict], moved: Optional[bool] = None):
         """Agent pose by dead reckoning from the action log ONLY.
 
         Information isolation: the pose is never seeded from, or corrected by,
-        simulator metadata.  ``pose_initial`` must be ``origin``; the old
-        ``'sim'`` seeding path has been removed.  Whether a locomotion action
-        actually advanced is taken from the purely visual ``moved`` estimate.
+        simulator metadata.  ``pose_initial`` must be ``origin``: the episode
+        starts at the origin of the world model's own frame.  Whether a
+        locomotion action actually advanced is taken from the purely visual
+        ``moved`` estimate.
         """
-        # BUG FIXED 2026-09-15: the first observation used to only seed the pose
-        # and skipped integrating the action that produced it, dropping the
-        # first move of every episode.  Seed *and* integrate now.
+        # The first observation both seeds the pose and integrates the action
+        # that produced it, so the agent's first move is never dropped.
         if self._pose is None:
             self._pose = [0.0, 0.0, 0.0, 0.0]
         self._integrate_pose(action, moved)
@@ -518,8 +511,8 @@ class WorldModel:
         """Dead-reckon the pose from the last action.
 
         ``moved is False`` (a locomotion action whose frame did not change)
-        means the agent did not advance -- the old code learned this from the
-        simulator's error message, this version from the frames alone.
+        means the agent did not advance.  The verdict comes from the frames
+        alone; the simulator's error message is never consulted.
         """
         action = action or {}
         name = action.get("action_name")
@@ -570,11 +563,9 @@ class WorldModel:
         argument; a bare ``MoveAhead`` carries neither.  The wrapper resolves
         ``magnitude -> granularity -> move_small_magnitude (0.25)``.
 
-        BUG FIXED 2026-09-15: this function used to read ``magnitude`` only and
-        then fall back to the configured ``move_ahead_magnitude`` (0.5), so
-        EVERY move was integrated with the wrong distance -- a bare MoveAhead
-        (really 0.25 m) was recorded as 0.5 m and MoveAhead(Large) (1.0 m) was
-        recorded as 0.5 m.  That alone produced unbounded odometry drift.
+        Odometry is only as good as this resolution: a bare ``MoveAhead`` moves
+        0.25 m while ``MoveAhead(Large)`` moves 1.0 m, so the fallback must be
+        the *small* magnitude and never the configured ``move_ahead_magnitude``.
         """
         mag = action.get("magnitude")
         if isinstance(mag, (int, float)):
@@ -615,11 +606,13 @@ class WorldModel:
         Uses the same camera model as ``shared/geometry.unproject``:
         camera at ``agent + (0, CAMERA_Y, 0)``, basis rotated by the agent's
         yaw **and** its camera horizon, and the vertical pixel offset measured
-        *upwards* from the principal point (``cy - v``).  Until 2026-09-17
-        this function dropped the pitch, ignored the camera height, and used
-        the flipped sign -- measured against recorded ground truth on the
-        coverage sweep that cost a median 1.01 m of 3D error at 30 deg pitch
-        (see tools/eval_projection_accuracy.py).
+        *upwards* from the principal point (``cy - v``).
+
+        All three parts are required: AI2-THOR's depth is the distance along
+        the optical axis, 79% of the household tasks start with a LookDown, and
+        the metric depth map is meaningless without the matching orientation.
+        ``tools/eval_projection_accuracy.py`` measures this against recorded
+        ground truth.
         """
         fx = (self.width / 2.0) / math.tan(math.radians(self.fov / 2.0))
         fy = fx
@@ -676,8 +669,8 @@ class WorldModel:
         Rule (2026-09-15): the step succeeded iff the frame changed
         (``mse > 1``, see ``self_observation.estimate_success``).  State
         updates are applied only when ``action_ok`` is True; ``action_ok``
-        None (frames unavailable) falls back to the old "target visible"
-        guard.
+        None (frames unavailable, or the target is not fully in view) falls
+        back to the "target visible" guard.
         """
         if not action_name:
             return
@@ -795,13 +788,12 @@ class WorldModel:
         no pickling is needed.  ``path`` may include a directory that does not
         exist yet.
 
-        Two things this method guarantees (both were bugs until 2026-09-16):
+        Two guarantees:
 
         * **numpy is converted**, not passed through.  A slot's ``obs`` holds
-          ``(camera, ray)`` numpy pairs, and ``json.dump`` writes *incrementally*,
-          so a non-serializable value used to abort the dump half way and leave
-          a truncated, unparseable file behind (14/14 checkpoints on the eval
-          boxes were corrupt this way).
+          ``(camera, ray)`` numpy pairs, and ``json.dump`` writes
+          *incrementally*, so a non-serializable value would abort the dump
+          half way and leave a truncated, unparseable file behind.
         * **the write is atomic**: payload goes to ``<path>.tmp`` first and is
           then ``os.replace``d, so a failure at any point leaves the previous
           checkpoint intact instead of a half-written one.

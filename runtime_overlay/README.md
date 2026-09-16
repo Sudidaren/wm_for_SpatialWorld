@@ -1,7 +1,6 @@
 # LightWM runtime overlay（相对官方 SpatialWorld 的全部代码改动）
 
-> **2026-09-16 更新**：overlay 已重刷为"无作弊 WM v2"运行时（**52 个文件**），
-> 与 `SpatialWorld` 本地工作区逐字节一致，`MANIFEST.sha256` 已重建。
+> 本 overlay 含 **52 个文件**，与 SpatialWorld 工作区逐字节一致（`MANIFEST.sha256`）。
 > 逐文件说明见 [`INVENTORY.md`](INVENTORY.md)，完整交接见
 > [`docs/HANDOVER_2026-09-16.md`](../docs/HANDOVER_2026-09-16.md)。
 
@@ -9,8 +8,8 @@
 
 `runtime_overlay/` 里的文件 = 相对官方
 `github.com/Hongcheng-Gao/SpatialWorld`（commit `f47b1e0`，main）的全部 LightWM
-代码改动（52 个文件）。克隆官方仓库后把这些文件覆盖过去，再按下面脚本
-校验，即可得到与本地一致的运行时代码。
+运行时代码（52 个文件）。克隆官方仓库后把这些文件覆盖过去，再按下面脚本校验，
+即可得到与本地一致的运行时代码。
 
 ## 怎么用（三条命令）
 
@@ -56,61 +55,40 @@ export LIGHTWM_DATA_ROOT=/data/lightwm_data       # 6 个数据池根（见 ligh
 `PERCEPTION_CKPT` 会覆盖配置里的绝对路径；权重与数据下载方式见
 `REPRODUCE_DETECTOR.md` 与 HF 说明。
 
-## 本 overlay 包含的关键改动（2026-09-16 版）
+## 本 overlay 的内容
 
-**WM 运行时（`mllm_base_agent/agent/`）**
+**世界模型运行时（`mllm_base_agent/agent/`）**
 
-- `world_model.py`：dense+depth 感知（RF-DETR Small 检测 + DINOv2 单目深度，
-  不再用模拟器分割/真值深度）、物体中心 3D 锚点、位姿纯航位推算（冻结 sim 位姿）、
-  地标回环纠偏、锚点不确定度；`_to_metadata()` 是给提示层唯一的出口
-- `self_observation.py`（新）：帧差判动作成败（MSE>1），替代模拟器 error_message
-- `memory_probe.py`：每步提示块（手持 / 移动被挡 / 上一动作成败）；
-  已删除 oracle 走格回退、FD、噪声观测等旧通道
-- `target_priority.py`（新）：目标物位置提示（**默认关**，`WM_TARGET_HINT=1` 开）；
-  物品名由模型开局自由文本自述，**无词表、无别名表**
-- `object_query.py`（新）：`CheckState()` 完成前查状态（**默认关**，`WM_STATE_CHECK=1` 开）；
-  不拦 DONE；通用 `Query(<物体>)` 已砍
-- `runner.py`：接线与计量（tokens / api_calls / 步数），无 `perception_ckpt` 直接报错
-
-**相对上一版 overlay 被移除的模块（不必手工删，官方仓库里本来就没有）**
-
-- `mllm_base_agent/agent/failure_detection.py`（读模拟器真值判成败 → 改为帧差）
-- `mllm_base_agent/agent/noisy_observer.py`（旧信息隔离层）
-- `mllm_base_agent/agent/subgoals.py`（旧子目标分解）
-- `mllm_base_agent/agent/plan.py`（任务级子目标分解，2026-09-17 删除：无收益，
-  且会在上下文里多塞一份机器生成的计划。`runner.py` 里的接线、`wm_config_patch`
-  的 `WM_PLAN` 开关一并移除；`run_ablation.sh` 的 `plan` 位置参数保留但已不再被读取）
-
-它们只存在于**旧版** overlay 里，是早期实验的产物；现在这套运行时不再需要，
-官方 `f47b1e0` 也从未包含它们，所以照上文两条命令操作即可，无需删除动作。
+- `world_model.py`：RGB + 单目深度感知（RF-DETR Small 检测头 + DINOv2 深度头，
+  不使用模拟器分割或真值深度）、物体 3D 锚点与多视角三角化、纯动作日志航位推算、
+  相机模型（含 `cameraHorizon` 与 `CAMERA_Y = 0.675`）、地标位姿校正、回环纠偏、
+  锚点不确定度；`_to_metadata()` 是给提示层的唯一出口
+- `self_observation.py`：由相邻帧差异判断动作是否改变画面
+- `memory_probe.py`：每步提示块（手持 / 移动被挡 / 上一动作成败）
+- `target_priority.py`：目标物位置提示（`WM_TARGET_HINT=1` 开启，默认关）
+- `object_query.py`：`CheckState()` 完整前状态汇总（`WM_STATE_CHECK=1` 开启，默认关；不拦截 DONE）
+- `runner.py`：接线与计量（tokens / api_calls / 步数）；没有 `perception_ckpt` 时直接报错
 
 **环境与模型适配**
 
-- `environments/ai2thor/wrapper.py`：`AI2THOR_SERVER_TIMEOUT` / `AI2THOR_START_TIMEOUT`
-  可调（软件渲染下仅因慢而超时，不该算环境故障）
-- `llm/provider.py`：推理模型（gpt-6 / o1 / o3 / o4）自动改用 `max_completion_tokens`
+- `environments/ai2thor/wrapper.py`：`AI2THOR_SERVER_TIMEOUT` / `AI2THOR_START_TIMEOUT` 可调
+- `llm/provider.py`：推理模型（gpt-6 / o1 / o3 / o4）自动使用 `max_completion_tokens`
 - `scripts/ai2thor/work/run_task.py`、`scripts/procthor/work/run_task.py`：
-  归一化 `success_conditions`（复数键 + `success_logic`），否则官方 evaluator
-  走 legacy 分支对 list 调 `.get()` 抛异常、所有任务恒判失败
+  归一化 `success_conditions`（复数键 + `success_logic`），供官方 evaluator 使用
 
 **测试**
 
-- `tests/test_object_query.py`（7/7）、`tests/test_object_query_loop.py`（9/9）、
-  `tests/test_target_priority.py`（10/10，含"源码里不得出现对象词表"的断言）
+- `tests/test_wm_delivery.py`（信息隔离审计 + 功能冒烟，21 项）
+- `tests/test_object_query.py`（7）、`tests/test_object_query_loop.py`（9）、
+  `tests/test_target_priority.py`（10）
 
-**未接入 overlay 的独立产出**
+**独立产出（运行时不引用）**
 
 - `mllm_base_agent/agent/hidden_location_advisor.py` 与
-  `test_hidden_location_advisor.py` 属 phase C（`phase_c/hidden_world_belief/`）
-  的独立模块，运行时没有任何代码 import 它们，保留只为该目录文档里的测试路径可用。
+  `test_hidden_location_advisor.py` 属 phase C（`phase_c/hidden_world_belief/`）的独立模块。
 
-## 历史改动（2026-09-14 及以前）
+**实验配置**
 
-- `mllm_base_agent/agent/world_model.py`：dense+depth 感知（不再用模拟器分割）、
-  地标位姿修正、锚点不确定度（distance_err）、sim 位姿运行时封锁
-- `mllm_base_agent/agent/memory_probe.py`：± 区间提示（**已于 09-16 删除**）
-- `experiments/configs/ai2thor/`：12 个实验配置（oracle 对照显式打标）
-- 其余为早期 LightWM 改动（FD、noisy observer、worldmodel 配置等）
+- `experiments/configs/` 下为各模型与各环境的对照配置。
 
-> 调试截图 `envs/ai2thor/step_*.png` 为误留产物，未包含在 overlay 中，
-> 不影响任何功能。
+> 调试截图 `envs/ai2thor/step_*.png` 不包含在 overlay 中。

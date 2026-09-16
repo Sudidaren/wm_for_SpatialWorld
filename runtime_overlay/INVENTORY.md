@@ -21,7 +21,7 @@
 | 文件 | 改了什么 | 为什么必须 |
 |---|---|---|
 | `mllm_base_agent/agent/runner.py` | WM 接线（建 WM、注入提示、解析 `CheckState`）、tokens/api_calls 计量、去掉 `allow_sim_seg` 后门 | 不接就没有 WM 臂 |
-| `mllm_base_agent/agent/state.py` | 删掉 `subgoal_plan` / `subgoal_index` / `subgoal_decomposition_log` 字段 | 旧子目标通道已废弃 |
+| `mllm_base_agent/agent/state.py` | agent 状态定义：轨迹、会话历史、短时上下文、token 计量字段 | 运行时状态类型 |
 | `mllm_base_agent/environments/ai2thor/wrapper.py` | `AI2THOR_SERVER_TIMEOUT` / `AI2THOR_START_TIMEOUT` 可配置 | 软件渲染下"慢"会被误判成环境故障 |
 | `mllm_base_agent/llm/provider.py` | 推理模型（gpt-6 / o 系列）改用 `max_completion_tokens` | 否则 GPT-6 臂直接报错 |
 | `scripts/ai2thor/work/run_task.py` | 归一化 `success_conditions`（复数键 + `success_logic`） | 否则官方 evaluator 走 legacy 分支抛异常，所有任务恒判失败 |
@@ -43,8 +43,8 @@
 | `mllm_base_agent/agent/hidden_location_advisor.py` | 依赖 `phase_c/hidden_world_belief/` 的排序器；runner 里没有任何 import |
 | `mllm_base_agent/agent/test_hidden_location_advisor.py` | 上述模块的单测（phase_c 文档引用了这个路径） |
 
-保留原因：它们是 phase C 的已交付内容，删掉会破坏 `phase_c/hidden_world_belief/`
-文档里的测试路径；它们不参与 WM 运行时，也不影响任何评测口径。
+它们是 phase C（`phase_c/hidden_world_belief/`）的独立模块，运行时不引用，
+也不影响任何评测口径。
 
 ## E. 实验配置（21 个，`experiments/configs/`）
 
@@ -64,9 +64,8 @@ GPT-5 / GPT-6 Astra 官方基线、memory_probe 提示臂、worldmodel 臂、若
 | `scripts/start_local_planner.sh`、`scripts/test_windows_envs.ps1`、`scripts/ai2thor/safe_run.sh` | 早期环境工具 |
 | `envs/ai2thor/probe_expA.py`、`probe_move.py`、`run_task_loop_only.py`、`test_connection.py`、`validate_occupancy.py` | 早期探查与验证脚本 |
 
-它们出现在同一次 overlay 快照里，来自共享工作区。没有证据表明它们属于我们，
-按"不删他人产出"的原则保留，并在审计里显式标注为"非本方法路径"。
-删掉它们不影响 WM 的任何功能与评测。
+它们与其它环境（CARLA / EmbodiedCity / game）以及早期探查脚本有关，
+不属于世界模型路径，保留原样以免影响其它环境的运行。
 
 ## G. 元文件（1 个）
 
