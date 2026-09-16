@@ -26,6 +26,7 @@ the evidence that the published repo reproduces the intended behaviour.
 from __future__ import annotations
 
 import ast
+import os
 import re
 import sys
 from pathlib import Path
@@ -353,6 +354,43 @@ def test_world_model_refuses_simulator_pose():
     except ValueError:
         return
     raise AssertionError("pose_from_action_log=False must be refused")
+
+
+def test_world_model_checkpoint_round_trip():
+    """save() must produce complete JSON even with numpy inside a slot."""
+    import json
+    import tempfile
+
+    import numpy as np
+
+    from mllm_base_agent.agent.world_model import WorldModel
+
+    wm = WorldModel(move_magnitudes={"MoveAhead": 0.5, "MoveSmall": 0.25})
+    wm.attach_perception(StubPerception())
+    frame = np.zeros((600, 800, 3), dtype=np.uint8)
+    wm.observe(None, action={"action_name": "MoveAhead"}, moved=True,
+               action_ok=True, frame=frame)
+    wm.observe(None, action={"action_name": "MoveAhead"}, moved=True,
+               action_ok=True, frame=frame)
+    assert wm._slots, "precondition: at least one anchor exists"
+    assert any(slot.get("obs") for slot in wm._slots.values()), \
+        "precondition: the slot kept multi-view rays (numpy inside)"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "wm.json")
+        wm.save(path)                                  # must not raise
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)                        # must be complete JSON
+        assert raw["_slots"], raw.keys()
+        assert not os.path.exists(path + ".tmp"), "temp file left behind"
+
+        back = WorldModel.load(path)
+        assert set(back._slots) == set(wm._slots), (set(back._slots), set(wm._slots))
+        assert back._slot_seq == wm._slot_seq, (back._slot_seq, wm._slot_seq)
+        assert back._step == wm._step
+        for oid, slot in wm._slots.items():
+            for i in range(3):
+                assert abs(back._slots[oid]["pos"][i] - slot["pos"][i]) < 1e-9
 
 
 def test_done_is_never_intercepted():

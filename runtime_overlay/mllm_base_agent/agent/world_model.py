@@ -730,6 +730,17 @@ class WorldModel:
         All internal structures are plain dicts/sets of JSON-able values, so
         no pickling is needed.  ``path`` may include a directory that does not
         exist yet.
+
+        Two things this method guarantees (both were bugs until 2026-09-16):
+
+        * **numpy is converted**, not passed through.  A slot's ``obs`` holds
+          ``(camera, ray)`` numpy pairs, and ``json.dump`` writes *incrementally*,
+          so a non-serializable value used to abort the dump half way and leave
+          a truncated, unparseable file behind (14/14 checkpoints on the eval
+          boxes were corrupt this way).
+        * **the write is atomic**: payload goes to ``<path>.tmp`` first and is
+          then ``os.replace``d, so a failure at any point leaves the previous
+          checkpoint intact instead of a half-written one.
         """
         import json
 
@@ -740,6 +751,7 @@ class WorldModel:
             "height": self.height,
             "hand_from_action_log": self.hand_from_action_log,
             "_step": self._step,
+            "_slot_seq": self._slot_seq,
             "_slots": self._slots,
             "_holding": self._holding,
             "_contents": {k: sorted(v) for k, v in self._contents.items()},
@@ -748,8 +760,35 @@ class WorldModel:
             "_blocked_from_moves": sorted(self._blocked_from_moves),
             "_pose": list(self._pose) if self._pose else None,
         }
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=1)
+        payload = self._jsonable(data)
+        tmp = f"{path}.tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, ensure_ascii=False, indent=1)
+                fh.flush()
+                os.fsync(fh.fileno())
+        except Exception:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
+        os.replace(tmp, path)
+
+    @staticmethod
+    def _jsonable(value):
+        """Recursively turn numpy / set / tuple structures into JSON types."""
+        if isinstance(value, dict):
+            return {str(k): WorldModel._jsonable(v) for k, v in value.items()}
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, (list, tuple)):
+            return [WorldModel._jsonable(v) for v in value]
+        if isinstance(value, (set, frozenset)):
+            return [WorldModel._jsonable(v) for v in sorted(value, key=repr)]
+        return value
 
     @classmethod
     def load(
@@ -776,6 +815,18 @@ class WorldModel:
             checkpoint_dir=checkpoint_dir,
         )
         wm._slots = data.get("_slots") or {}
+        # Without this a resumed run restarts the id counter at 0 and can
+        # collide with restored "det|<Type>|<n>" ids.  Fall back to the ids
+        # actually present when an older checkpoint has no _slot_seq.
+        seq = data.get("_slot_seq")
+        if seq is None:
+            seen = []
+            for key in wm._slots:
+                tail = str(key).rsplit("|", 1)[-1]
+                if str(key).startswith("det|") and tail.isdigit():
+                    seen.append(int(tail))
+            seq = max(seen) if seen else 0
+        wm._slot_seq = int(seq)
         wm._holding = data.get("_holding")
         wm._contents = {
             k: set(v) for k, v in (data.get("_contents") or {}).items()
