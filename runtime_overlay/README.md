@@ -27,8 +27,12 @@ bash lightwm/runtime_overlay/setup_lightwm_runtime.sh \
 ```
 
 校验通过 = 47 个文件与本地逐字节一致（sha256）。
-注意：overlay 只覆盖 `mllm_base_agent/ experiments/ evaluation/ envs/ scripts/ tests/`，
-官方仓库里被我们**删除**的文件（见下）需要手工删除。
+
+> **2026-09-16 实测**：在一个干净的 `f47b1e0` worktree 上执行本脚本，
+> 47/47 全部 `sha256 OK`，且应用后的运行时 `python3 -m py_compile` 通过。
+> overlay 只做"新增 + 覆盖"，官方 `mllm_base_agent/agent/` 在 f47b1e0 只有
+> 4 个文件（`__init__.py` / `graph.py` / `runner.py` / `state.py`），
+> 其余运行时文件全部由本 overlay 提供，**不需要手工删除任何官方文件**。
 
 ## 环境变量（运行时必须）
 
@@ -58,11 +62,14 @@ export LIGHTWM_DATA_ROOT=/data/lightwm_data       # 6 个数据池根（见 ligh
 - `plan.py`（新）：子目标分解 `WM_PLAN=off|old|new`（**默认 off**）
 - `runner.py`：接线与计量（tokens / api_calls / 步数），无 `perception_ckpt` 直接报错
 
-**被删除的文件（应用 overlay 后请手工删除）**
+**相对上一版 overlay 被移除的三个模块（不必手工删，官方仓库里本来就没有）**
 
 - `mllm_base_agent/agent/failure_detection.py`（读模拟器真值判成败 → 改为帧差）
 - `mllm_base_agent/agent/noisy_observer.py`（旧信息隔离层）
 - `mllm_base_agent/agent/subgoals.py`（旧子目标分解）
+
+它们只存在于**旧版** overlay 里，是早期实验的产物；现在这套运行时不再需要，
+官方 `f47b1e0` 也从未包含它们，所以照上文两条命令操作即可，无需删除动作。
 
 **环境与模型适配**
 
