@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -17,12 +18,6 @@ from typing import Any, Dict, Iterable, Optional
 from mllm_base_agent.agent.state import AgentState
 from actions.response_parser import parse_vlm_response
 from actions.max_steps import resolve_max_steps_from_task
-from mllm_base_agent.agent.subgoals import (
-    advance_subgoal_index,
-    decompose_task,
-    format_current_subgoal,
-    format_subgoal_plan,
-)
 from mllm_base_agent.llm.messages import AIMessage, HumanMessage, SystemMessage
 from mllm_base_agent.llm.provider import get_vlm
 from mllm_base_agent.prompts import get_system_prompt
@@ -95,6 +90,12 @@ EXTERNAL_FAILURE_TYPES = {'api_error', 'env_error', 'external_error'}
 MODEL_FAILURE_TYPES = {'parse_error', 'action_error', 'model_error'}
 
 
+def _object_query_cfg(state: AgentState) -> dict:
+    """Opt-in WM object-query / completion-check settings (WM_QUERY=1)."""
+    probe = ((state.get('config') or {}).get('memory_probe') or {})
+    return probe.get('object_query') or {}
+
+
 class GraphRecursionError(RuntimeError):
     """Compatibility exception for old graph error handling."""
 
@@ -160,7 +161,33 @@ def _accumulate_token_usage(state: AgentState, token_usage: Dict[str, int]) -> N
         usage[key] = int(usage.get(key, 0) or 0) + normalized[key]
 
 
-def _read_image_as_data_url(image_path: str, max_retries: int, retry_delay: int) -> str:
+def _read_image_as_data_url(image_path: str, max_retries: int, retry_delay: int,
+                            max_side: int = 0) -> str:
+    """Read a frame as a data URL; optionally downscale (history frames only).
+
+    ``max_side`` > 0 converts to JPEG with that longest side, which cuts the
+    payload of long multimodal histories by ~10x.  The image of the *current*
+    step is always sent untouched.
+    """
+    if max_side:
+        try:
+            import io as _io
+
+            from PIL import Image as _Image
+
+            with _Image.open(image_path) as im:
+                im = im.convert("RGB")
+                if max(im.size) > max_side:
+                    scale = max_side / float(max(im.size))
+                    im = im.resize((max(1, int(im.width * scale)),
+                                    max(1, int(im.height * scale))),
+                                   _Image.BILINEAR)
+                buf = _io.BytesIO()
+                im.save(buf, format="JPEG", quality=85)
+            payload = base64.b64encode(buf.getvalue()).decode('utf-8')
+            return f'data:image/jpeg;base64,{payload}'
+        except Exception:
+            pass        # fall back to the raw file below
     last_error: Optional[BaseException] = None
     for attempt in range(max_retries):
         try:
@@ -195,8 +222,6 @@ def _build_messages(state: AgentState, image_url: str) -> list:
         'success_criteria_block',
         'Complete the task according to the instruction. Use EndTask(DONE) only after confirming success.',
     )
-    subgoal_plan = state.get('subgoal_plan') or []
-    subgoal_index = int(state.get('subgoal_index', 0) or 0)
     prompt = get_system_prompt(
         env_type,
         enable_summary=enable_summary,
@@ -208,8 +233,6 @@ def _build_messages(state: AgentState, image_url: str) -> list:
         task_prompt=state.get('task_prompt', 'Complete the task.'),
         success_criteria_block=success_criteria_block,
     )
-    if subgoal_plan:
-        prompt += '\n\n' + format_subgoal_plan(subgoal_plan, subgoal_index)
     messages = [SystemMessage(content=prompt)]
     long_term_summary = state.get('long_term_summary', '')
     history = (state.get('short_term_history', []) or [])[-MODEL_HISTORY_TURNS:]
@@ -221,14 +244,15 @@ def _build_messages(state: AgentState, image_url: str) -> list:
         hist_image = entry.get('image_path')
         if hist_image and os.path.exists(hist_image):
             try:
-                content.append({'type': 'image_url', 'image_url': {'url': _read_image_as_data_url(hist_image, 1, 0)}})
+                content.append({'type': 'image_url', 'image_url': {
+                    'url': _read_image_as_data_url(
+                        hist_image, 1, 0,
+                        max_side=int(os.environ.get('WM_HISTORY_MAX_SIDE', 0) or 0))}})
             except Exception:
                 content.append({'type': 'text', 'text': '[Image unavailable]'})
         messages.append(HumanMessage(content=content))
         messages.append(AIMessage(content=entry.get('raw_response', '')))
     current_content = []
-    if subgoal_plan:
-        current_content.append({'type': 'text', 'text': format_current_subgoal(subgoal_plan, subgoal_index)})
     if not history and enable_summary and long_term_summary.strip():
         current_content.append({'type': 'text', 'text': f'**Previous Exploration Summary (Long-term Memory):**\n{long_term_summary}\n\n---\n'})
     goal_image_path = state.get('goal_image_path')
@@ -239,23 +263,41 @@ def _build_messages(state: AgentState, image_url: str) -> list:
         except Exception:
             pass
     current_content.append({'type': 'text', 'text': f"Step {state.get('step_count', 0)}"})
-    fd_pending = state.get('_fd_pending', '')
-    if fd_pending:
-        current_content.append({'type': 'text', 'text': fd_pending})
-        state['_fd_pending'] = ''
     mem_pending = state.get('_mem_pending', '')
     if mem_pending:
         current_content.append({'type': 'text', 'text': mem_pending})
         state['_mem_pending'] = ''
-    fd_cfg = (state.get('config') or {}).get('failure_detection') or {}
-    if fd_cfg.get('inject_error_message'):
-        history = state.get('short_term_history') or []
-        if history:
-            last_err = (history[-1].get('error_message') or '').strip()
-            if last_err:
-                current_content.append(
-                    {'type': 'text', 'text': f"⚠️ 上一个动作失败：{last_err}"}
-                )
+    # task-level plan (optional): one text call at the first step, then a
+    # per-step progress line whose ticks come from the agent's action history
+    plan_cfg = ((state.get('config') or {}).get('memory_probe') or {}).get('plan') or {}
+    if plan_cfg.get('enabled'):
+        from mllm_base_agent.agent import plan as plan_mod
+
+        if state.get('_plan') is None:
+            plan = plan_mod.decompose(
+                state.get('vlm'), state.get('task_prompt', ''),
+                variant=str(plan_cfg.get('prompt', 'new')))
+            state['_plan'] = plan
+            state['_plan_done'] = 0
+            print(f"\n[Plan] {len(plan)} subgoals "
+                  f"(prompt={plan_cfg.get('prompt', 'new')})", flush=True)
+            for i, step in enumerate(plan, 1):
+                print(f"   {i}. {step.get('goal', '')}", flush=True)
+        plan_line = plan_mod.render(state.get('_plan') or [],
+                                    int(state.get('_plan_done', 0) or 0))
+        if plan_line:
+            state['_plan_line'] = plan_line
+            current_content.append({'type': 'text', 'text': plan_line})
+    # opt-in: teach the query syntax once, then repeat the WM memory readout
+    oq_cfg = _object_query_cfg(state)
+    if oq_cfg.get('enabled'):
+        from mllm_base_agent.agent import object_query as oq
+
+        if int(state.get('step_count', 0) or 0) == 0:
+            current_content.append({'type': 'text', 'text': oq.PROTOCOL_TEXT})
+        oq_block = oq.render_block(state, int(state.get('step_count', 0) or 0))
+        if oq_block:
+            current_content.append({'type': 'text', 'text': oq_block})
     current_content.append({'type': 'image_url', 'image_url': {'url': image_url}})
     messages.append(HumanMessage(content=current_content))
     return messages
@@ -287,14 +329,30 @@ def think_node(state: AgentState) -> AgentState:
         return state
 
     mem_hint_snapshot = state.get('_mem_pending', '')
+    _t_build = time.time()
     messages = _build_messages(state, image_url)
+    if os.environ.get('WM_STEP_TIMING'):
+        _n_img = 0
+        for _m in messages:
+            _c = getattr(_m, 'content', None)
+            if isinstance(_c, list):
+                _n_img += sum(1 for _p in _c
+                              if isinstance(_p, dict)
+                              and _p.get('type') == 'image_url')
+        print(f"[timing] 组装消息(含历史图编码) {time.time()-_t_build:.2f}s "
+              f"消息数={len(messages)} 本次请求图片数={_n_img}", flush=True)
+    if state.get('_plan_line'):
+        mem_hint_snapshot = (mem_hint_snapshot + '\n' + state['_plan_line']).strip()
     last_error: Optional[BaseException] = None
     response_text: Optional[str] = None
     step_token_usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'api_calls': 0}
 
     for api_attempt in range(api_max_retries):
         try:
+            _t_vlm = time.time()
             response = vlm.invoke(messages)
+            if os.environ.get('WM_STEP_TIMING'):
+                print(f"[timing] VLM 调用 {time.time()-_t_vlm:.2f}s", flush=True)
             response_text = getattr(response, 'content', str(response))
             usage = _extract_token_usage_from_response(response)
             _accumulate_token_usage(state, usage)
@@ -326,6 +384,43 @@ def think_node(state: AgentState) -> AgentState:
 
     for parse_attempt in range(max_retries):
         try:
+            oq_cfg = _object_query_cfg(state)
+            if oq_cfg.get('enabled'):
+                from mllm_base_agent.agent import object_query as oq
+
+                query = oq.parse_query(oq.extract_action_string(response_text or ''))
+                if query:
+                    step_i = int(state.get('step_count', 0) or 0)
+                    state['next_action'] = oq.apply_query(state, query, step_i)
+                    state['failure_type'] = None
+                    state['task_done_by_model'] = False
+                    state['task_fail_by_model'] = False
+                    state['structured_trajectory'].append({
+                        'step': step_i,
+                        'thinking': f'(object query: {query})',
+                        'action_string': f'Query({query})',
+                        'action': dict(state['next_action']),
+                        'updated_summary': '',
+                        'raw_response': (response_text or '')[:2000],
+                        'llm_token_usage': dict(step_token_usage),
+                        'parse_error': None,
+                        'retry_count': parse_attempt,
+                        'reward': None,
+                        'observation_summary': None,
+                        'image_path': observation.image_path,
+                    })
+                    state['conversation_history'].append({
+                        'step': step_i,
+                        'user_message': f"Step {step_i}",
+                        'assistant_response': response_text or '',
+                        'llm_token_usage': dict(step_token_usage),
+                        'action_executed': 'CheckState',
+                        'reward': None,
+                        'error_message': None,
+                    })
+                    _shown = "CheckState()" if query == "__all__" else f"Query({query})"
+                    print(f"\n[StateCheck] step {step_i}: {_shown}", flush=True)
+                    return state
             parsed = parse_vlm_response(
                 response_text or '',
                 enable_summary=enable_summary,
@@ -362,7 +457,6 @@ def think_node(state: AgentState) -> AgentState:
                     'thinking': parsed['thinking_text'],
                     'action_string': parsed['action_string'],
                     'mem_hint': mem_hint_snapshot,
-                    'fd_hint': state.get('_fd_pending', ''),
                     'hidden_belief': state.get('_hidden_belief_diagnostics', {}),
                 },
             )
@@ -376,6 +470,9 @@ def think_node(state: AgentState) -> AgentState:
                 'error_message': None,
             })
             state['failure_type'] = None
+            # NOTE: DONE is never intercepted.  The agent may end the episode
+            # whenever it wants; Query(...) / Query(all) are options it can use
+            # beforehand, and the choice is entirely the model's.
             return state
         except Exception as exc:
             last_error = exc
@@ -427,75 +524,6 @@ def _append_step_log(state: AgentState, record: dict) -> None:
         pass
 
 
-def _hidden_location_hint(state: AgentState, metadata: dict, action: dict,
-                          error_message: Optional[str]) -> str:
-    """Render the deployment-v2 Top-k hint from perceived furniture only."""
-    mem_cfg = (state.get('config') or {}).get('memory_probe') or {}
-    cfg = mem_cfg.get('hidden_location_advisor') or {}
-    if not cfg.get('enabled'):
-        return ''
-    advisor = state.get('_hidden_location_advisor')
-    if advisor is None:
-        from mllm_base_agent.agent.hidden_location_advisor import HiddenLocationAdvisor
-        advisor = HiddenLocationAdvisor(cfg['checkpoint'])
-        state['_hidden_location_advisor'] = advisor
-    targets = cfg.get('targets') or mem_cfg.get('targets') or []
-    visible_types = {
-        item.get('objectType') for item in (metadata.get('objects') or [])
-        if item.get('visible')
-    }
-    searched = state.setdefault('_hidden_searched_absent', {})
-    beliefs = state.setdefault('_hidden_beliefs', {})
-    if not error_message and action.get('action_name') == 'OpenObject':
-        opened_type = action.get('object_type')
-        candidates = [
-            item for item in (metadata.get('furniture') or [])
-            if item.get('objectType') == opened_type
-        ]
-        candidates.sort(key=lambda item: (
-            -int(item.get('last_seen') or 0),
-            float(item.get('distance') or 1e9),
-            str(item.get('objectId') or ''),
-        ))
-        if candidates:
-            opened_id = str(candidates[0].get('objectId'))
-            for target in targets:
-                if target not in visible_types:
-                    searched.setdefault(target, set()).add(opened_id)
-                    belief = beliefs.get(target)
-                    if belief is not None:
-                        belief.confirm_absent(opened_id)
-    hints = []
-    all_diagnostics = {}
-    for target in targets:
-        if target in visible_types:
-            continue
-        room_type = cfg.get('room_type', 'kitchen')
-        top_k = int(cfg.get('top_k', 3))
-        belief = beliefs.get(target)
-        if belief is None:
-            belief = advisor.new_belief(target, room_type, top_k)
-            beliefs[target] = belief
-            for receptacle_id in searched.get(target, ()):
-                belief.confirm_absent(receptacle_id)
-        ranked, diagnostics = advisor.update_belief(
-            belief,
-            metadata.get('furniture') or [],
-            observation_id=f"{state.get('step_count', 0)}:{target}",
-            learned_log_likelihood=(
-                state.get('_hidden_learned_log_likelihood', {}).get(target)),
-            learned_alpha=float(cfg.get('learned_alpha', 0.0)),
-            projection=str(cfg.get('safety_projection', 'exact')),
-            top_k=top_k,
-        )
-        all_diagnostics[target] = diagnostics
-        hint = advisor.render_ranked_hint(target, ranked)
-        if hint:
-            hints.append(hint)
-    state['_hidden_belief_diagnostics'] = all_diagnostics
-    return '\n'.join(hints)
-
-
 def act_node(state: AgentState) -> AgentState:
     if state.get('think_failed') or state.get('failure_type') in {'api_error', 'parse_error', 'external_error'}:
         return state
@@ -511,7 +539,9 @@ def act_node(state: AgentState) -> AgentState:
     observation = state.get('observation')
     prev_image_path = getattr(observation, 'image_path', None) if observation is not None else None
     error_message = None
-    if action_type == 'task_completion':
+    # 'internal_noop' is the agent's own Query(...) / completion re-check: it
+    # consumes a step but never reaches the environment.
+    if action_type in ('task_completion', 'internal_noop'):
         state['step_count'] = int(state.get('step_count', 0) or 0) + 1
     else:
         try:
@@ -530,52 +560,35 @@ def act_node(state: AgentState) -> AgentState:
                     f"heavy_procs={_heavy_process_count()}",
                     flush=True,
                 )
-            # Failure detection hook (v0): update detector and queue hints.
-            fd_cfg = (state.get('config') or {}).get('failure_detection') or {}
-            if fd_cfg.get('enabled'):
-                from mllm_base_agent.agent.failure_detection import FailureDetector
+            # Action outcome from the two frames the VLM was shown:
+            # mse > 1 -> success, mse < 1 -> failure (every action type).
+            from mllm_base_agent.agent.self_observation import (
+                MOVE_ACTIONS, ROTATE_ACTIONS, estimate_success,
+            )
 
-                detector = state.get('_fd_detector')
-                if detector is None:
-                    detector = FailureDetector(
-                        max_hints=int(fd_cfg.get('max_hints', 2)),
-                    )
-                    state['_fd_detector'] = detector
-                detector.update(
-                    action=action.get('action_name'),
-                    action_success=not error_message,
-                    error_message=error_message,
-                    prev_image_path=prev_image_path,
-                    cur_image_path=getattr(observation, 'image_path', None),
-                )
-                state['_fd_pending'] = detector.pending_text()
-                if state['_fd_pending']:
-                    print(f"\n[FailureDetector] step {state.get('step_count', 0)}: "
-                          f"{state['_fd_pending'].replace(chr(10), ' | ')}", flush=True)
+            _ok, _mse = estimate_success(
+                action.get('action_name'), prev_image_path,
+                getattr(observation, 'image_path', None),
+            )
+            _is_move = (action.get('action_name') in MOVE_ACTIONS
+                        or action.get('action_name') in ROTATE_ACTIONS)
+            action_blocked = (_is_move and _ok is False)
+            if action_blocked:
+                print(f"\n[SelfObservation] step {state.get('step_count', 0)}: "
+                      f"画面未变化（MSE={_mse:.1f}），判定该移动动作被挡", flush=True)
             mem_cfg = (state.get('config') or {}).get('memory_probe') or {}
             if mem_cfg.get('enabled'):
                 from mllm_base_agent.agent.memory_probe import MemoryProbe
 
                 probe = state.get('_mem_probe')
                 if probe is None:
+                    task_cfg = (state.get('config') or {}).get('task') or {}
                     probe = MemoryProbe(
-                        targets=mem_cfg.get('targets') or None,
-                        navigation_directive=bool(
-                            mem_cfg.get('navigation_directive', False)
-                        ),
-                        # success_conditions gate is disabled by default:
-                        # task.json verifier internals are not given to agents
-                        success_conditions=(
-                            mem_cfg.get('success_conditions')
-                            if mem_cfg.get('use_success_conditions') else None
-                        ),
-                        task_description=(
-                            (state.get('config') or {}).get('task') or {}
-                        ).get('instruction'),
-                        oracle_reachable=bool(
-                            mem_cfg.get('oracle_reachable', False)
-                        ),
+                        task_description=task_cfg.get('instruction'),
                     )
+                    # 目标物名字由模型自己在开局说一次（无词表、无菜单）
+                    probe.set_vlm(state.get('vlm'))
+                    probe.set_target_hint(mem_cfg.get('target_hint') or {})
                     state['_mem_probe'] = probe
                 raw_meta = getattr(observation, 'metadata', None) or {}
                 wm_cfg = mem_cfg.get('world_model') or {}
@@ -587,7 +600,6 @@ def act_node(state: AgentState) -> AgentState:
                         env_cfg = (state.get('config') or {}).get('env') or {}
                         actions_cfg = (state.get('config') or {}).get('actions') or {}
                         wm_kwargs = dict(
-                            targets=mem_cfg.get('targets') or None,
                             fov=float(env_cfg.get('field_of_view', 60)),
                             width=int(env_cfg.get('width', 800)),
                             height=int(env_cfg.get('height', 600)),
@@ -658,64 +670,51 @@ def act_node(state: AgentState) -> AgentState:
                                 raise RuntimeError(
                                     f"PerceptionRuntime init failed: {exc}")
                             wm.attach_perception(runtime)
-                    probe.set_map_provider(wm.reachable_cells)
-                    probe.set_known_provider(wm.known_walkable)
+                            # 注意：不再把检测器的类别表交给 MemoryProbe
+                            # （基线没有词表，WM 臂也不能用；目标物名字由模型自述）
                     raw_meta = wm.observe(
                         observation,
                         action=action,
-                        error_message=error_message,
+                        moved=_ok,             # frame-diff outcome (mse>1)
+                        action_ok=_ok,
                         env=state.get('env'),
                     )
-                else:
-                    noise_cfg = mem_cfg.get('noise') or {}
-                    if noise_cfg.get('enabled'):
-                        from mllm_base_agent.agent.noisy_observer import NoisyObserver
-
-                        observer = state.get('_noisy_observer')
-                        if observer is None:
-                            observer = NoisyObserver(
-                                **{
-                                    k: noise_cfg[k]
-                                    for k in (
-                                        "position_sigma",
-                                        "odom_drift",
-                                        "visibility_miss_rate",
-                                        "forget_steps",
-                                        "hand_from_action_log",
-                                        "hand_error_rate",
-                                        "seed",
-                                    )
-                                    if k in noise_cfg
-                                }
-                            )
-                            state['_noisy_observer'] = observer
-                        raw_meta = observer.observe(
-                            raw_meta,
-                            action=action,
-                            error_message=error_message,
-                        )
-                if mem_cfg.get('advisor_only'):
-                    state['_mem_pending'] = _hidden_location_hint(
-                        state, raw_meta, action, error_message
+                if os.environ.get('WM_DEBUG'):
+                    print(
+                        "[WM-DEBUG] raw_meta="
+                        + (str(sorted(raw_meta.keys())) if isinstance(raw_meta, dict)
+                           else type(raw_meta).__name__)
+                        + f" n_obj={len((raw_meta or {}).get('objects') or []) if isinstance(raw_meta, dict) else -1}"
+                        + f" agent={(raw_meta or {}).get('agent') if isinstance(raw_meta, dict) else None}",
+                        flush=True,
                     )
-                else:
-                    state['_mem_pending'] = probe.update(
-                        metadata=raw_meta,
-                        action_name=action.get('action_name'),
-                        error_message=error_message,
-                        object_type=action.get('object_type'),
-                        env=state.get('env'),
-                    )
+                state['_mem_pending'] = probe.update(
+                    metadata=raw_meta,
+                    action_name=action.get('action_name'),
+                    object_type=action.get('object_type'),
+                    env=state.get('env'),
+                    blocked=action_blocked,   # frame diff, not error_message
+                    action_ok=((raw_meta.get('action_outcome') or {}).get('ok')
+                               if isinstance(raw_meta, dict) else _ok),
+                    action_ok_source=(
+                        (raw_meta.get('action_outcome') or {}).get('source')
+                        if isinstance(raw_meta, dict) else None),
+                )
                 if state['_mem_pending']:
                     print(f"\n[MemoryProbe] step {state.get('step_count', 0)}: "
                           f"{state['_mem_pending'].replace(chr(10), ' | ')}", flush=True)
-            if not error_message:
-                plan = state.get('subgoal_plan') or []
-                if plan:
-                    state['subgoal_index'] = advance_subgoal_index(
-                        plan,
-                        int(state.get('subgoal_index', 0) or 0),
-                        action,
+                oq_cfg = _object_query_cfg(state)
+                if oq_cfg.get('enabled'):
+                    from mllm_base_agent.agent import object_query as oq
+
+                    mem = oq.memory_of(state)
+                    mem.observe(raw_meta, int(state.get('step_count', 0) or 0))
+                    mem.record_interaction(
+                        int(state.get('step_count', 0) or 0),
+                        action.get('action_name'),
+                        action.get('object_type'),
+                        ((raw_meta.get('action_outcome') or {}).get('ok')
+                         if isinstance(raw_meta, dict) else _ok),
                     )
         except Exception as exc:
             state['failure_type'] = 'env_error'
@@ -726,14 +725,22 @@ def act_node(state: AgentState) -> AgentState:
 
     if state.get('structured_trajectory'):
         last_step = state['structured_trajectory'][-1]
-        last_step['reward'] = 0 if action_type == 'task_completion' else getattr(observation, 'reward', 0)
+        last_step['reward'] = 0 if action_type in ('task_completion', 'internal_noop') else getattr(observation, 'reward', 0)
         last_step['observation_summary'] = f'Task completion: {action_name}' if action_type == 'task_completion' else getattr(observation, 'text_state', '')
         last_step['error_message'] = error_message
     if state.get('conversation_history'):
         last_conv = state['conversation_history'][-1]
         last_conv['action_executed'] = action_name
-        last_conv['reward'] = 0 if action_type == 'task_completion' else getattr(observation, 'reward', 0)
+        last_conv['reward'] = 0 if action_type in ('task_completion', 'internal_noop') else getattr(observation, 'reward', 0)
         last_conv['error_message'] = error_message
+
+    # tick off plan progress from the agent's own action history
+    if state.get('_plan'):
+        from mllm_base_agent.agent import plan as plan_mod
+
+        state['_plan_done'] = plan_mod.advance(
+            state['_plan'], int(state.get('_plan_done', 0) or 0),
+            action_name, action.get('object_type'))
 
     context = (state.get('config') or {}).get('context_management') or {}
     configured_history = int(context.get('short_term_history_window_size', MODEL_HISTORY_TURNS) or MODEL_HISTORY_TURNS)
@@ -744,7 +751,7 @@ def act_node(state: AgentState) -> AgentState:
     state.setdefault('short_term_history', []).append({
         'step': int(state.get('step_count', 1) or 1) - 1,
         'action_string': action_string,
-        'reward': 0 if action_type == 'task_completion' else getattr(observation, 'reward', 0),
+        'reward': 0 if action_type in ('task_completion', 'internal_noop') else getattr(observation, 'reward', 0),
         'image_path': getattr(observation, 'image_path', None),
         'raw_response': state.get('structured_trajectory', [{}])[-1].get('raw_response', ''),
         'error_message': error_message,
@@ -815,29 +822,12 @@ def evaluate_node(state: AgentState) -> AgentState:
         success, _score = perform_final_evaluation(state)
         state['success'] = success
         state['fail_reason'] = None if success else 'Model claimed DONE but success conditions not met'
-        mem_cfg = (state.get('config') or {}).get('memory_probe') or {}
-        if not success and mem_cfg.get('done_gate'):
-            # DONE gate: block a premature DONE and let the model continue.
-            metadata = getattr(state.get('observation'), 'metadata', None) or {}
-            from mllm_base_agent.agent.memory_probe import MemoryProbe
-
-            gate_probe = MemoryProbe(
-                success_conditions=mem_cfg.get('success_conditions')
-                or ((state.get('config') or {}).get('task') or {}).get(
-                    'success_conditions'
-                ),
-            )
-            progress = gate_probe._check_progress(metadata.get('objects', []) or [])
-            state['_mem_pending'] = (
-                "⚠️ [SpatialMemory] 你声称任务完成，但成功条件尚未全部满足：\n"
-                f"- {progress}\n"
-                "请不要 DONE，继续执行剩余步骤。"
-            )
-            state['task_done_by_model'] = False
-            state['should_continue'] = True
-            state['success'] = None
-            state['fail_reason'] = None
-            return state
+        # REMOVED 2026-09-15 (information isolation): the DONE gate used to
+        # block a wrong DONE and tell the model which success conditions were
+        # still unmet.  That reads (a) the task's formal success predicate from
+        # task.json and (b) the simulator's object metadata -- neither of which
+        # the frozen MLLM ever sees, so it was an oracle.  A wrong DONE is now
+        # simply a failure, exactly as in the official baseline.
         state['should_continue'] = False
         return state
     if state.get('task_fail_by_model'):
@@ -880,9 +870,6 @@ def final_node(state: AgentState) -> AgentState:
         'failure_type': state.get('failure_type'),
         'step_count': state.get('step_count', 0),
         'max_steps': state.get('max_steps', 0),
-        'subgoal_plan': state.get('subgoal_plan') or [],
-        'subgoal_index': state.get('subgoal_index', 0),
-        'subgoal_decomposition': state.get('subgoal_decomposition_log') or {},
         'action_sequence': env.get_action_sequence() if hasattr(env, 'get_action_sequence') else '(no action records)',
         'trajectory': [
             {
@@ -912,81 +899,8 @@ class AgentRunner:
     def __init__(self, recursion_limit: int = 1000) -> None:
         self.recursion_limit = recursion_limit
 
-    def _get_planner(self, state: AgentState) -> Any:
-        """Create the planner model from config, or fall back to the main VLM."""
-        config = state.get('config') or {}
-        planner_cfg = ((config.get('model') or {}).get('planner') or {})
-        if not planner_cfg:
-            return state.get('vlm')
-        try:
-            return get_vlm(
-                provider=planner_cfg.get('provider', 'openai'),
-                model_name=planner_cfg.get('model_name'),
-                temperature=planner_cfg.get('temperature', 0.2),
-                max_tokens=planner_cfg.get('max_tokens', 512),
-                top_p=planner_cfg.get('top_p'),
-                base_url=planner_cfg.get('base_url'),
-                api_key=planner_cfg.get('api_key'),
-                timeout=planner_cfg.get('timeout'),
-                client_max_retries=planner_cfg.get('client_max_retries', 2),
-            )
-        except Exception:
-            return state.get('vlm')
-
-    def _maybe_decompose(self, state: AgentState) -> AgentState:
-        """Online subgoal decomposition (one text-only call per task).
-
-        Never raises and never changes behaviour on failure: if decomposition
-        is disabled or fails, ``subgoal_plan`` is simply empty.
-        """
-        if state.get('subgoal_plan') is not None:
-            return state
-        config = state.get('config') or {}
-        context_cfg = config.get('context_management') or {}
-        if not context_cfg.get('enable_subgoal_decomposition', False):
-            state['subgoal_plan'] = []
-            return state
-        task_prompt = state.get('task_prompt', '')
-        if not task_prompt:
-            state['subgoal_plan'] = []
-            return state
-        env_type = str((config.get('env') or {}).get('type', 'ai2thor')).lower()
-        planner = self._get_planner(state)
-        if planner is None:
-            state['subgoal_plan'] = []
-            state['subgoal_decomposition_log'] = {
-                'ok': False,
-                'error': 'No planner model available',
-            }
-            return state
-        try:
-            result = decompose_task(planner, task_prompt, env_type=env_type)
-        except Exception as exc:
-            result = None
-            state['subgoal_decomposition_log'] = {'ok': False, 'error': str(exc)}
-        if result and result.get('subgoals'):
-            state['subgoal_plan'] = result['subgoals']
-            state['subgoal_index'] = 0
-            usage = result.get('token_usage')
-            if usage:
-                _accumulate_token_usage(state, usage)
-            state['subgoal_decomposition_log'] = {
-                'ok': True,
-                'raw_response': result.get('raw_response', ''),
-                'attempts': result.get('attempts', 1),
-                'subgoals': result['subgoals'],
-            }
-        else:
-            state['subgoal_plan'] = []
-            state['subgoal_decomposition_log'] = {
-                'ok': False,
-                'error': 'Decomposition failed or returned no valid subgoals',
-            }
-        return state
-
     def stream(self, initial_state: AgentState, config: Optional[dict] = None) -> Iterable[Dict[str, AgentState]]:
         state = initial_state
-        state = self._maybe_decompose(state)
         task_cfg = (state.get('config') or {}).get('task') or {}
         if state.get('max_steps_override') is not None:
             state['max_steps'] = int(state['max_steps_override'])
@@ -1030,4 +944,4 @@ except Exception:
 
 parse_action_string = _parse_action_string
 _perform_final_evaluation = lambda state: perform_final_evaluation(state)[0]
-execute_action = lambda env, action_dict: (*env.step_with_action_dict(action_dict), False) if action_dict.get('action_type') != 'task_completion' else (None, None, True)
+execute_action = lambda env, action_dict: (*env.step_with_action_dict(action_dict), False) if action_dict.get('action_type') not in ('task_completion', 'internal_noop') else (None, None, True)

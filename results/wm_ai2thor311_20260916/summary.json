@@ -1,0 +1,61 @@
+{
+  "task_set": "ai2thor",
+  "n_tasks_total": 311,
+  "metric": "TSR = success / decided; failed_external excluded",
+  "pulled_at": null,
+  "models": {
+    "qwen3vl-8b": {
+      "label": "Qwen3-VL-8B-Instruct",
+      "decided": 177,
+      "wm_success": 9,
+      "wm_tsr": 0.0508,
+      "baseline_success": 3,
+      "baseline_tsr": 0.0169,
+      "wm_only": 8,
+      "baseline_only": 2,
+      "mcnemar_exact_p": 0.1094,
+      "premature_done": 13,
+      "premature_done_share_of_failures": 0.0774,
+      "step_limit": 148,
+      "step_limit_share_of_failures": 0.881,
+      "avg_total_tokens": 342907
+    },
+    "kimivl-a3b": {
+      "label": "Kimi-VL-A3B-Instruct",
+      "decided": 191,
+      "wm_success": 1,
+      "wm_tsr": 0.0052,
+      "baseline_success": 2,
+      "baseline_tsr": 0.0105,
+      "wm_only": 0,
+      "baseline_only": 1,
+      "mcnemar_exact_p": 1.0,
+      "premature_done": 112,
+      "premature_done_share_of_failures": 0.5895,
+      "step_limit": 42,
+      "step_limit_share_of_failures": 0.2211,
+      "avg_total_tokens": 175059
+    },
+    "qwen3vl-30b": {
+      "label": "Qwen3-VL-30B-A3B",
+      "decided": 86,
+      "wm_success": 3,
+      "wm_tsr": 0.0349,
+      "baseline_success": 4,
+      "baseline_tsr": 0.0465,
+      "wm_only": 1,
+      "baseline_only": 2,
+      "mcnemar_exact_p": 1.0,
+      "premature_done": 22,
+      "premature_done_share_of_failures": 0.2651,
+      "step_limit": 60,
+      "step_limit_share_of_failures": 0.7229,
+      "avg_total_tokens": 294694
+    }
+  },
+  "caveats": [
+    "8B / Kimi baselines come from their 438-task runs, of which only 267/311 AI2-THOR tasks were decided; pairing is restricted to the WM-decided subset.",
+    "The 30B WM arm was still running when this snapshot was taken.",
+    "Target hint (WM_TARGET_HINT) and CheckState (WM_STATE_CHECK) were OFF for every arm in this snapshot."
+  ]
+}

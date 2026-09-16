@@ -77,6 +77,13 @@ class HiddenLocationAdvisor:
         if not candidates:
             return []
         vocab = self.vocab
+        # Keep only receptacle types the frozen prior knows about; otherwise an
+        # unknown type would silently map to vocabulary id 0 and distort the
+        # ranking.
+        known_receptacles = vocab["receptacle"]
+        candidates = [c for c in candidates if c[1] in known_receptacles]
+        if not candidates:
+            return []
         target = torch.tensor(vocab["target"].get(target_type, 0))
         room = torch.tensor(vocab["room"].get(room_type, 0))
         types = [kind for _, kind, _ in candidates]

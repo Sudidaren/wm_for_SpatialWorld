@@ -1,4 +1,4 @@
-"""Select RF-DETR/depth by default; explicitly select dino for old checkpoints."""
+"""Perception backend: RF-DETR detector + monocular depth head."""
 import os
 from pathlib import Path
 
@@ -19,11 +19,4 @@ def build_runtime(config=None):
         return RFDETRDepthRuntime(str(Path(checkpoint).expanduser()),
             options['detector_path'], options['obj_thr'],
             device=options.get('device') or ('cuda' if torch.cuda.is_available() else 'cpu'))
-    if backend == 'dino':
-        from phase_b.perception_runtime import PerceptionRuntime
-        return PerceptionRuntime(str(Path(checkpoint).expanduser()),
-            variant=options.get('variant', 'small'),
-            resolution=int(options.get('resolution', 224)),
-            width=int(options.get('width', 256)), obj_thr=options['obj_thr'],
-            device=options.get('device'))
     raise ValueError(f'Unknown perception backend: {backend}')

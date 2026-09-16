@@ -33,6 +33,28 @@ from train import scale_invariant_depth  # noqa
 from shared.data_index import load_index  # noqa
 
 
+def object_weight_map(batch: dict, size: int, weight: float = 3.0):
+    """Per-pixel weight map emphasizing object bounding boxes.
+
+    Weight = 1 everywhere, `weight` inside boxes (boxes are normalized in the
+    800x600 capture frame; depth GT is resized to `size`x`size` the same way
+    the RGB is, so box pixel coords scale with 224/800 on x and 224/600 on y).
+    """
+    B = batch["boxes"].shape[0]
+    wmap = torch.ones(B, 1, size, size, dtype=torch.float32)
+    for i in range(B):
+        n = int(batch["num_boxes"][i].item())
+        for b in batch["boxes"][i][:n]:
+            cx, cy, bw, bh = [float(v) for v in b]
+            x0 = int(max(0, (cx - bw / 2.0) * size))
+            x1 = int(min(size - 1, (cx + bw / 2.0) * size))
+            y0 = int(max(0, (cy - bh / 2.0) * size))
+            y1 = int(min(size - 1, (cy + bh / 2.0) * size))
+            if x1 > x0 and y1 > y0:
+                wmap[i, 0, y0:y1 + 1, x0:x1 + 1] = weight
+    return wmap
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", default="checkpoints_local/dense_best.pt")
@@ -42,6 +64,12 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--workers", type=int, default=12)
     ap.add_argument("--resolution", type=int, default=224)
+    ap.add_argument("--depth-size", type=int, default=224,
+                    help="train target resolution for depth GT (default 224)")
+    ap.add_argument("--obj-weight", type=float, default=3.0,
+                    help="loss weight multiplier inside object boxes")
+    ap.add_argument("--splits", default=None,
+                    help="split JSON (default: no-val split)")
     ap.add_argument("--variant", choices=["small", "base"], default="small")
     ap.add_argument("--width", type=int, default=256)
     ap.add_argument("--limit", type=int, default=0)
@@ -57,6 +85,8 @@ def main():
     if device.startswith("cuda"):
         print("gpu:", torch.cuda.get_device_name(0))
 
+    import dataset as ds_mod
+    ds_mod.DEPTH_SIZE = args.depth_size
     index = load_index()
     num_types = len(index["object_types"])
     num_actions = len(index["actions"])
@@ -84,12 +114,17 @@ def main():
     n = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"trainable params (depth head only): {n}")
 
+    splits = args.splits or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "data",
+        "splits_noval.json")
     ds = PerceptionDataset(index, limit=args.limit, seed=args.seed,
-                           require_depth=True)
+                           require_depth=True, split_path=splits)
     loader = DataLoader(ds, batch_size=args.batch, shuffle=True,
                         num_workers=args.workers,
                         collate_fn=collate_perception, pin_memory=True)
     print(f"depth frames: {len(ds)} | batches/epoch: {len(loader)}")
+    print(f"depth target resolution: {args.depth_size}x{args.depth_size} "
+          f"(object weight {args.obj_weight})")
 
     opt = torch.optim.AdamW(model.depth_head.parameters(),
                             lr=args.lr, weight_decay=1e-4)
@@ -106,10 +141,15 @@ def main():
             gt = batch["depth"].to(device)
             with torch.autocast("cuda", enabled=args.amp and "cuda" in device):
                 pred = model.depth(rgb)
-                pred = F.interpolate(pred, size=(56, 56),
+                pred = F.interpolate(
+                    pred, size=(args.depth_size, args.depth_size),
                                      mode="bilinear", align_corners=False)
                 mask = (gt > 0.1).float()
-                loss = scale_invariant_depth(pred, gt, mask)
+                wm = mask * object_weight_map(
+                    batch, args.depth_size, args.obj_weight).to(device)
+                wl1 = (torch.abs(pred - gt) * wm).sum() / \
+                    wm.sum().clamp(min=1.0)
+                loss = scale_invariant_depth(pred, gt, mask) + wl1
             opt.zero_grad()
             scaler.scale(loss).backward()
             scaler.unscale_(opt)
@@ -138,15 +178,23 @@ def main():
             rgb = batch["rgb"].to(device)
             gt = batch["depth"].to(device)
             pred = model.depth(rgb)
-            pred = F.interpolate(pred, size=(56, 56),
+            pred = F.interpolate(
+                pred, size=(args.depth_size, args.depth_size),
                                  mode="bilinear", align_corners=False)
             mask = (gt > 0.1)
             e = (pred - gt).abs()[mask]
+            wm = object_weight_map(batch, args.depth_size,
+                                   args.obj_weight).to(device) > 1.0
+            eo = (pred - gt).abs()[wm & mask]
             if e.numel():
-                errs.append(e.float().mean().item())
+                errs.append({"whole": e.float().mean().item()})
+            if eo.numel():
+                errs[-1]["obj"] = eo.float().mean().item()
     if errs:
+        wh = np.mean([x["whole"] for x in errs])
+        ob = np.mean([x.get("obj", float("nan")) for x in errs])
         print(f"sanity MAE over {len(errs)*args.batch} frames: "
-              f"{np.mean(errs):.3f} m", flush=True)
+              f"whole={wh:.3f} m | object-box={ob:.3f} m", flush=True)
     print("saved checkpoints_local/dense_depth_best.pt")
 
 

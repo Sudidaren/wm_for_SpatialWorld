@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import json
+import re
 import sys
 
 import numpy as np
@@ -43,12 +45,58 @@ def has_image(fr: dict) -> bool:
     return bool(fr.get("rgb")) and not fr["rgb"].endswith("/")
 
 
+# ---- split-aware training selection --------------------------------------
+# Default: data/splits_noval.json (2026-09-07): no validation set; train =
+# 67 AI2-THOR rooms + procTHOR val 0-99 + VirtualHome train scenes.
+_SPLIT_CACHE = {"path": None, "sets": None}
+
+
+def _canon_floor(scene: str) -> str:
+    m = re.search(r"(FloorPlan\d+)", str(scene or ""))
+    return m.group(1) if m else ""
+
+
+def load_train_split(path: str = None):
+    path = (path or os.environ.get("LIGHTWM_SPLITS") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "data",
+        "splits_noval.json"))
+    if _SPLIT_CACHE["path"] == path and _SPLIT_CACHE["sets"] is not None:
+        return _SPLIT_CACHE["sets"]
+    if not os.path.isfile(path):
+        print(f"[dataset] split file not found, using ALL frames: {path}")
+        return None
+    with open(path) as f:
+        d = json.load(f)
+    fp = d["scene_splits"]["ai2thor_floorplans"]
+    pc = d["scene_splits"].get("procthor_val", {})
+    vh = d["scene_splits"].get("virtualhome", {})
+    sets = {
+        "ai2thor": set(fp.get("train", [])),
+        "procthor": set(pc.get("train", [])),
+        "vh": set(vh.get("train", [])),
+    }
+    _SPLIT_CACHE["path"] = path
+    _SPLIT_CACHE["sets"] = sets
+    return sets
+
+
+def frame_in_train(fr: dict, split=None) -> bool:
+    if split is None:
+        return True
+    s = str(fr.get("scene") or "")
+    if s.startswith("procthor"):
+        return s in split["procthor"]
+    if s.startswith("virtualhome"):
+        return s in split["vh"]
+    return _canon_floor(s) in split["ai2thor"]
+
+
 class PerceptionDataset(Dataset):
     """Frame -> (rgb, gt boxes [cx,cy,w,h], object class ids, depth target)."""
 
     def __init__(self, index=None, limit: int = 0, seed: int = 0,
                  class_balanced: bool = False, copy_paste: bool = False,
-                 require_depth: bool = False):
+                 require_depth: bool = False, split_path: str = None):
         self.index = index if index is not None else load_index()
         frames = self.index["frames"]
         self.types = self.index["object_types"]
@@ -57,6 +105,11 @@ class PerceptionDataset(Dataset):
         frames = [f for f in frames if has_image(f)]
         if require_depth:
             frames = [f for f in frames if f.get("depth")]
+        split = load_train_split(split_path)
+        if split is not None:
+            frames = [f for f in frames if frame_in_train(f, split)]
+            print(f"[PerceptionDataset] split-filtered frames: {len(frames)}",
+                  flush=True)
         if limit:
             rng = np.random.RandomState(seed)
             frames = [frames[i] for i in rng.choice(len(frames), limit, replace=False)]
@@ -154,7 +207,7 @@ class FeasibilityDataset(Dataset):
     labels recorded for the action taken from this observation)."""
 
     def __init__(self, index=None, limit: int = 0, seed: int = 0,
-                 use_fd: bool = True):
+                 use_fd: bool = True, split_path: str = None):
         self.index = index if index is not None else load_index()
         frames = self.index["frames"]
         self.actions = self.index["actions"]
@@ -167,6 +220,11 @@ class FeasibilityDataset(Dataset):
         frames = [f for f in frames if f["action"] in self.action2id
                   and f["action"] not in ("Teleport", "Pass", "Done")
                   and has_image(f)]
+        split = load_train_split(split_path)
+        if split is not None:
+            frames = [f for f in frames if frame_in_train(f, split)]
+            print(f"[FeasibilityDataset] split-filtered frames: {len(frames)}",
+                  flush=True)
         if limit:
             rng = np.random.RandomState(seed)
             frames = [frames[i] for i in rng.choice(len(frames), limit, replace=False)]
@@ -180,6 +238,9 @@ class FeasibilityDataset(Dataset):
                     if f["action"] in self.action2id and
                     f["error_class"] in self.err2id
                 ]
+                if split is not None:
+                    fd_frames = [
+                        f for f in fd_frames if frame_in_train(f, split)]
                 print(f"[FeasibilityDataset] merged {len(fd_frames)} FD frames")
                 frames = frames + fd_frames
             except Exception as e:

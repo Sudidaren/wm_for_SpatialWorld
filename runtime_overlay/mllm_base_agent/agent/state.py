@@ -15,9 +15,6 @@ class AgentState(TypedDict, total=False):
     failure_type: Optional[str]
     short_term_history: List[Dict[str, Any]]
     long_term_summary: str
-    subgoal_plan: Optional[List[Dict[str, Any]]]
-    subgoal_index: int
-    subgoal_decomposition_log: Optional[Dict[str, Any]]
     structured_trajectory: List[Dict[str, Any]]
     conversation_history: List[Dict[str, Any]]
     next_action: Optional[dict]

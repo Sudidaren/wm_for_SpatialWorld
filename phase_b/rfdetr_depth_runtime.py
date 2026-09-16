@@ -56,3 +56,21 @@ class RFDETRDepthRuntime:
         return {"detections": detections, "depth": depth, "rgb_shape": (h, w),
                 "detection_views": 1, "encoder_forwards": 2,
                 "backend": "rfdetr_small_depth", "precision": "fp32"}
+
+    @torch.inference_mode()
+    def embed(self, rgb):
+        """Place fingerprint: L2-normalised DINOv2 CLS of this frame.
+
+        Reuses the depth head's frozen encoder, so loop closure costs one extra
+        encoder forward and no extra weights.  Used only for "have I been here
+        before" -- it never reads anything but the RGB the agent was shown.
+        """
+        h, w = rgb.shape[:2]
+        image = Image.fromarray(rgb).resize((self.resolution, self.resolution))
+        x = torch.from_numpy(np.asarray(image, dtype=np.float32) / 255)
+        x = x.permute(2, 0, 1)[None].to(self.device)
+        with torch.autocast(self.device.type, enabled=False):
+            _, cls = self.depth_model._patch_features(x)
+        v = cls[0].float().cpu().numpy()
+        n = float(np.linalg.norm(v))
+        return v / n if n > 1e-9 else v

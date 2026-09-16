@@ -98,31 +98,45 @@ VH_AI2_MAP = {
     "book": "Book",
     "bookshelf": "Shelf",
     "box": "Box",
+    "breadslice": "Bread",
     "candle": "Candle",
     "cellphone": "CellPhone",
     "chair": "Chair",
+    "coffeemaker": "CoffeeMachine",
     "coffeetable": "CoffeeTable",
+    "computer": "Desktop",
     "cookingpot": "Pot",
     "cup": "Cup",
+    "cupcake": "Cupcake",
     "curtains": "Curtains",
     "cutleryfork": "Fork",
     "cutleryknife": "Knife",
     "desk": "Desk",
     "dishbowl": "Bowl",
+    "dishwashingliquid": "DishwashingLiquid",
+    "faucet": "Faucet",
+    "folder": "Folder",
     "fridge": "Fridge",
     "garbagecan": "GarbageCan",
+    "keyboard": "Keyboard",
     "kitchencabinet": "Cabinet",
     "kitchencounter": "CounterTop",
     "kitchentable": "DiningTable",
     "lightswitch": "LightSwitch",
     "microwave": "Microwave",
+    "mouse": "Mouse",
     "mug": "Mug",
     "nightstand": "SideTable",
+    "pie": "Pie",
     "pillow": "Pillow",
     "plate": "Plate",
+    "radio": "Radio",
+    "remotecontrol": "RemoteControl",
     "sink": "Sink",
     "sofa": "Sofa",
+    "tablelamp": "DeskLamp",
     "toaster": "Toaster",
+    "toilet": "Toilet",
     "toiletpaper": "ToiletPaper",
     "towel": "Towel",
     "tv": "Television",
@@ -130,6 +144,15 @@ VH_AI2_MAP = {
     "vase": "Vase",
     "wallshelf": "Shelf",
     "waterglass": "Cup",
+    "wineglass": "WineGlass",
+}
+
+# VirtualHome-only assets added as NEW perception classes (no AI2-THOR
+# equivalent).  Kept out of VH_AI2_MAP-comment "high-confidence synonym"
+# set on purpose; each needs >= evidence-floor frames in VH data.
+VH_EXTRA_CLASSES = {
+    "Cupcake", "DishwashingLiquid", "Folder", "Keyboard",
+    "Mouse", "Pie", "Radio", "WineGlass",
 }
 
 
@@ -161,6 +184,9 @@ def build_index(out_path: str = DEFAULT_INDEX) -> Dict[str, Any]:
                 continue
             for o in f.get("visible_objects", []):
                 vocab.add(canonical_type(o.get("name", "")))
+    # VirtualHome-only classes (e.g. cupcake/keyboard/pie) are part of the
+    # perception vocabulary even though AI2-THOR data never contains them.
+    vocab.update(VH_EXTRA_CLASSES)
     frames: List[Dict] = []
     type_counts: Dict[str, int] = {}
     action_counts: Dict[str, int] = {}

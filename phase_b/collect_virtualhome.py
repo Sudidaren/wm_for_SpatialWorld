@@ -186,6 +186,36 @@ def main() -> None:
                 pt = [float(pos[0]), 1.2, float(pos[2])]
                 if pt not in positions:
                     positions.append(pt)
+            # If the scene still cannot provide anchors_per_scene viewpoints
+            # from task starts + room centers, spread the remaining anchors
+            # over the scene's floor tiles (farthest-point sampling).  This
+            # naturally picks room corners / far edges so viewpoints stay
+            # distinct from the room centers.
+            if len(positions) < args.anchors_per_scene:
+                tiles = []
+                for n in (g0 or {}).get("nodes", []) or []:
+                    if n.get("category") != "Floor":
+                        continue
+                    tr = n.get("obj_transform") or {}
+                    pos = tr.get("position")
+                    if not isinstance(pos, list) or len(pos) < 3:
+                        continue
+                    tiles.append([float(pos[0]), 1.2, float(pos[2])])
+
+                def min_dist_to_kept(p):
+                    best = None
+                    for q in positions:
+                        d = math.hypot(p[0] - q[0], p[2] - q[2])
+                        best = d if best is None else min(best, d)
+                    return 0.0 if best is None else best
+
+                while tiles and len(positions) < args.anchors_per_scene:
+                    p = max(tiles, key=min_dist_to_kept)
+                    tiles.remove(p)
+                    if min_dist_to_kept(p) >= 1.0 and p not in positions:
+                        positions.append(p)
+                        print(f"scene {scene}: floor-fill anchor "
+                              f"({p[0]:.3f}, {p[2]:.3f})", flush=True)
         if not positions:
             print(f"scene {scene}: no anchors, skip")
             continue
@@ -211,14 +241,9 @@ def main() -> None:
                 with open(gt_path, "w") as f:
                     json.dump({"scene": f"virtualhome-{scene}",
                                "objects": objs}, f)
-            ok_add = comm.add_character(resource[ai % 2])
+            ok_add = comm.add_character(
+                resource[ai % 2], position=[pos[0], 1.25, pos[2]])
             time.sleep(1.0)
-            if ok_add:
-                try:
-                    comm.move_character(0, pos)
-                    time.sleep(0.5)
-                except Exception:
-                    pass
             ok, graph = comm.environment_graph()
             if not ok:
                 print(f"scene {scene} anchor {ai}: graph fail, skip")
@@ -235,8 +260,10 @@ def main() -> None:
             frame_dir = os.path.join(ep_dir, "frames")
             if os.path.isdir(frame_dir) and \
                     os.path.isfile(os.path.join(ep_dir, "episode.json")):
-                print(f"{ep_id}: exists, skip")
-                continue
+                if glob.glob(os.path.join(frame_dir, "*_rgb.png")):
+                    print(f"{ep_id}: exists, skip")
+                    continue
+                print(f"{ep_id}: exists but empty, recapture", flush=True)
             os.makedirs(frame_dir, exist_ok=True)
             frames_meta = []
             step = 0

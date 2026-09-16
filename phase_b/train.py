@@ -125,6 +125,31 @@ def scale_invariant_depth(pred: torch.Tensor, gt: torch.Tensor, mask: torch.Tens
     return si + 0.5 * l1
 
 
+class ParamEMA:
+    """Exponential moving average over a fixed trainable parameter list.
+
+    EMA weights are smoother than the last step and usually improve final
+    detection recall.  swap() exchanges live params with the EMA shadow so
+    evaluation / checkpoint saving can use the EMA weights.
+    """
+
+    def __init__(self, params, decay: float = 0.9995):
+        self.decay = decay
+        self.shadow = [p.detach().clone() for p in params]
+
+    @torch.no_grad()
+    def update(self, params):
+        for s, p in zip(self.shadow, params):
+            s.mul_(self.decay).add_(p.detach(), alpha=1.0 - self.decay)
+
+    @torch.no_grad()
+    def swap(self, params):
+        for s, p in zip(self.shadow, params):
+            tmp = s.clone()
+            s.copy_(p.detach())
+            p.copy_(tmp)
+
+
 def train_perception(model, loader, epochs, lr, out, device, log_every=50):
     opt = torch.optim.AdamW(
         [p for p in model.parameters() if p.requires_grad], lr=lr, weight_decay=1e-4)
@@ -252,16 +277,20 @@ def train_feasibility(model, loader, epochs, lr, out, device, num_errors,
 
 
 def train_dense(model, loader, epochs, lr, out, device, grid=16,
-                log_every=100, amp=False, eval_every=0, index=None):
-    params = ([p for p in model.dense_head.parameters()]
+                log_every=100, amp=False, eval_every=0, index=None,
+                ema_decay=0.9995, extra_params=None):
+    params = ([p for p in model.adapter.parameters()]
+              + [p for p in model.dense_head.parameters()]
               + [p for p in model.dense_obj.parameters()]
               + [p for p in model.dense_off.parameters()]
               + [p for p in model.dense_size.parameters()]
-              + [p for p in model.dense_cls.parameters()])
+              + [p for p in model.dense_cls.parameters()]
+              + list(extra_params or []))
     opt = torch.optim.AdamW(params, lr=lr, weight_decay=1e-4)
     best = 1e9
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         opt, T_max=epochs, eta_min=lr * 0.05)
+    ema = ParamEMA(params, ema_decay) if ema_decay > 0 else None
     for ep in range(epochs):
         model.train()
         t0 = time.time()
@@ -294,6 +323,8 @@ def train_dense(model, loader, epochs, lr, out, device, grid=16,
             scaler.step(opt)
             scaler.update()
             torch.nn.utils.clip_grad_norm_(params, 5.0)
+            if ema is not None:
+                ema.update(params)
             tot += float(loss)
             if (bi + 1) % log_every == 0:
                 print(f"  ep{ep} b{bi+1}/{len(loader)} loss={loss.item():.3f} "
@@ -303,11 +334,22 @@ def train_dense(model, loader, epochs, lr, out, device, grid=16,
         print(f"[dense] epoch {ep} avg_loss={avg:.3f} time={time.time()-t0:.0f}s")
         if eval_every and (ep + 1) % eval_every == 0 and index is not None:
             print(f"  [dense] epoch {ep} val detection (obj_thr=0.25):")
-            eval_dense_sample(model, index, device)
+            if ema is not None:
+                ema.swap(params)
+            try:
+                eval_dense_sample(model, index, device)
+            finally:
+                if ema is not None:
+                    ema.swap(params)
         scheduler.step()
         if avg < best:
             best = avg
             torch.save(model.state_dict(), os.path.join(out, "dense_best.pt"))
+            if ema is not None:
+                ema.swap(params)
+                torch.save(model.state_dict(),
+                           os.path.join(out, "dense_best_ema.pt"))
+                ema.swap(params)
 
 
 def main():
@@ -333,6 +375,16 @@ def main():
                     help="class-balanced frame sampling (detection tasks)")
     ap.add_argument("--copy-paste", action="store_true",
                     help="copy-paste augmentation for rare objects (dense)")
+    ap.add_argument("--splits",
+                    default=os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)), "..",
+                        "data", "splits_noval.json"),
+                    help="split JSON (default: no-val split)")
+    ap.add_argument("--ema-decay", type=float, default=0.9995,
+                    help="EMA decay for dense trainable params (0 disables)")
+    ap.add_argument("--unfreeze-layers", type=int, default=0,
+                    help="unfreeze the last N DINOv2 transformer blocks "
+                         "(adds them to the optimizer + EMA)")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -356,31 +408,50 @@ def main():
         num_types=num_types, num_actions=num_actions, num_errors=num_errors,
         device="cpu", img_size=args.resolution,
         head_width=args.width, dinov2_name=dinov2_name).to(device)
+    if args.unfreeze_layers > 0:
+        blocks = model.encoder.encoder.layer
+        k = min(args.unfreeze_layers, len(blocks))
+        n_unf = 0
+        for blk in blocks[-k:]:
+            for p in blk.parameters():
+                p.requires_grad_(True)
+                n_unf += p.numel()
+        print(f"unfroze last {k} DINOv2 blocks "
+              f"(+{n_unf / 1e6:.2f}M trainable params)")
     n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"trainable params: {n_train}")
 
     if args.task == "perception":
         ds = PerceptionDataset(index, limit=args.limit, seed=args.seed,
                                class_balanced=args.class_balanced,
-                               copy_paste=args.copy_paste)
+                               copy_paste=args.copy_paste,
+                               split_path=args.splits)
         loader = _make_loader(ds, args, collate_perception)
         train_perception(model, loader, args.epochs, args.lr, args.out, device)
     elif args.task == "depth":
         ds = PerceptionDataset(index, limit=args.limit, seed=args.seed,
                                class_balanced=args.class_balanced,
-                               require_depth=True)
+                               require_depth=True, split_path=args.splits)
         loader = _make_loader(ds, args, collate_perception)
         train_depth(model, loader, args.epochs, args.lr, args.out, device)
     elif args.task == "dense":
+        extra_opt = None
+        if args.unfreeze_layers > 0:
+            blocks = model.encoder.encoder.layer
+            k = min(args.unfreeze_layers, len(blocks))
+            extra_opt = [p for blk in blocks[-k:] for p in blk.parameters()]
         ds = PerceptionDataset(index, limit=args.limit, seed=args.seed,
                                class_balanced=args.class_balanced,
-                               copy_paste=args.copy_paste)
+                               copy_paste=args.copy_paste,
+                               split_path=args.splits)
         loader = _make_loader(ds, args, collate_perception)
         train_dense(model, loader, args.epochs, args.lr, args.out, device,
                     grid=args.resolution // 14, amp=args.amp,
-                    eval_every=args.eval_every, index=index)
+                    eval_every=args.eval_every, index=index,
+                    ema_decay=args.ema_decay, extra_params=extra_opt)
     else:
-        ds = FeasibilityDataset(index, limit=args.limit, seed=args.seed)
+        ds = FeasibilityDataset(index, limit=args.limit, seed=args.seed,
+                                split_path=args.splits)
         loader = DataLoader(ds, batch_size=args.batch, shuffle=True,
                             num_workers=args.workers,
                             collate_fn=collate_feasibility,

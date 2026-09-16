@@ -25,7 +25,7 @@ if [ "$(git rev-parse HEAD 2>/dev/null)" != "f47b1e091985a7f141db8d93c6822b42663
 fi
 
 echo "== applying overlay =="
-for d in mllm_base_agent experiments evaluation envs scripts; do
+for d in mllm_base_agent experiments evaluation envs scripts tests; do
   if [ -d "$OVERLAY/$d" ]; then
     cp -r "$OVERLAY/$d"/. "$REPO/$d"/
   fi
@@ -34,7 +34,7 @@ if [ -f "$OVERLAY/.gitignore" ]; then
   cp "$OVERLAY/.gitignore" "$REPO/.gitignore"
 fi
 
-echo "== verifying sha256 (41 files) =="
+echo "== verifying sha256 ($(grep -c . "$OVERLAY/MANIFEST.sha256") files) =="
 sha256sum -c "$OVERLAY/MANIFEST.sha256"
 
 echo "OK: runtime files identical to LightWM local (base f47b1e0)."

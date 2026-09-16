@@ -1,0 +1,171 @@
+#!/usr/bin/env python
+"""Self-checks for the model-named target hint (target_priority.py).
+
+No object vocabulary and no alias table may appear anywhere in this path: the
+model names the task objects itself, and those runtime strings are matched
+against the perception head's runtime output.
+
+Run:  python tests/test_target_priority.py
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from mllm_base_agent.agent import target_priority as tp  # noqa: E402
+
+
+class StubVLM:
+    """Echoes a fixed JSON answer for the one-shot object extraction (v2格式)."""
+
+    def __init__(self, objects, legacy=False):
+        self.objects = objects
+        self.legacy = legacy
+        self.calls = 0
+
+    def invoke(self, messages):
+        self.calls += 1
+        if self.legacy:
+            payload = '{"objects": [' + ", ".join(
+                f'"{o}"' for o in self.objects) + "]}"
+        else:
+            payload = '{"objects": [' + ", ".join(
+                '{"env": "%s", "words": "%s"}' % (o, o.lower())
+                for o in self.objects) + "]}"
+        return type("R", (), {"content": payload})
+
+
+def obj(otype, dist=1.0, visible=False, x=0.0, z=1.0, last=1, sigma=0.2,
+        state=None, contents=None):
+    return {"objectType": otype, "distance": dist, "visible": visible,
+            "position": {"x": x, "y": 0.9, "z": z}, "last_seen_step": last,
+            "sigma": sigma, "state": state or {}, "contents": contents or []}
+
+
+def meta(objects, agent_xy=(0.0, 0.0), yaw=0.0, held=None):
+    return {"agent": {"position": {"x": agent_xy[0], "y": 0.9, "z": agent_xy[1]},
+                      "rotation": {"x": 0.0, "y": yaw, "z": 0.0}},
+            "objects": objects,
+            "inventoryObjects": ([{"objectId": "det|" + held + "|1",
+                                   "objectType": held}] if held else [])}
+
+
+# ---- no vocabulary in the path --------------------------------------
+
+def test_no_object_vocabulary_in_source():
+    import inspect
+
+    src = inspect.getsource(tp)
+    for token in ('"GarbageCan"', '"Laptop"', "'GarbageCan'", "_ALIASES"):
+        assert token not in src, f"词表残留: {token}"
+
+
+# ---- model-named extraction and matching ----------------------------
+
+def test_model_names_come_from_the_model_once():
+    vlm = StubVLM(["GarbageCan", "Lettuce"])
+    h = tp.TargetHinter("throw the lettuce in the trash", vlm=vlm)
+    assert h.model_names() == ["GarbageCan", "Lettuce"]
+    h.model_names()
+    assert vlm.calls == 1, vlm.calls          # 只问一次
+
+
+def test_legacy_string_format_still_parsed():
+    vlm = StubVLM(["GarbageCan"], legacy=True)
+    h = tp.TargetHinter("throw it in the trash", vlm=vlm)
+    assert h.entries() == [("GarbageCan", "GarbageCan")], h.entries()
+
+
+def test_words_fallback_when_env_name_differs():
+    # 模型写 env=Fridge，但检测头报的是 Refrigerator（或反之）时的退回逻辑
+    class V:
+        calls = 0
+        def invoke(self, messages):
+            V.calls += 1
+            return type("R", (), {"content":
+                '{"objects": [{"env": "Refrigerator", "words": "fridge"}]}'})
+    h = tp.TargetHinter("open the fridge", vlm=V())
+    # 检测头输出 Fridge，env 名 "Refrigerator" 匹配不上，退回 words "fridge"
+    text = h.update(meta([obj("Fridge", dist=1.5)]), {}, "", 1)
+    assert "Fridge" in text and "目前没见过" not in text, text
+
+
+def test_matching_is_case_and_substring_based():
+    got = tp.match_names(["garbage can", "CellPhone"],
+                         ["GarbageCan", "CellPhone", "Desk"])
+    assert got["garbage can"] == "GarbageCan", got
+    assert got["CellPhone"] == "CellPhone", got
+
+
+def test_hint_reports_only_detected_matches():
+    vlm = StubVLM(["GarbageCan", "Lettuce"])
+    h = tp.TargetHinter("throw the lettuce in the trash", vlm=vlm)
+    text = h.update(meta([obj("GarbageCan", dist=2.0)]), {}, "", 1)
+    assert "GarbageCan" in text, text
+    assert "Lettuce（任务目标·模型自述）：目前没见过" in text, text
+
+
+def test_hint_skips_visible_and_memory_only():
+    vlm = StubVLM(["Laptop", "Fridge"])
+    h = tp.TargetHinter("open the laptop and put the apple in the fridge",
+                        vlm=vlm)
+    text = h.update(meta([obj("Laptop", dist=1.0, visible=True),
+                          obj("Fridge", dist=2.0, x=0.0, z=2.0)]), {}, "", 1)
+    assert "视野内：Laptop" in text, text
+    assert "任务相关记忆（当前看不见的）" in text, text
+    assert "- Laptop（" not in text, text
+    assert "记住的位置在正前方约 2.0m" in text, text
+
+
+def test_pose_trigger_shortens_repeat():
+    vlm = StubVLM(["Laptop"])
+    h = tp.TargetHinter("open the laptop", vlm=vlm)
+    m = meta([obj("Laptop", dist=2.0, x=0.0, z=2.0)])
+    assert "约 2.0m" in h.update(m, {}, "", 1)
+    assert "位置同上" in h.update(m, {}, "", 2)
+    moved = h.update(meta([obj("Laptop", dist=1.0, x=0.0, z=1.0)],
+                          agent_xy=(0.0, 1.0)), {}, "", 3)
+    assert "位置同上" not in moved, moved
+
+
+def test_quota_and_settled_demotion():
+    vlm = StubVLM(["DeskLamp"])
+    h = tp.TargetHinter("please turn off the desk lamp", vlm=vlm)
+    lamp = obj("DeskLamp", state={"isToggled": False})
+    # 已经关掉（WM 账本）-> 不再出现在每步块里
+    assert h.update(meta([lamp]), {}, "", 1) == ""
+
+    vlm2 = StubVLM(["Laptop"])
+    h2 = tp.TargetHinter("find the laptop", vlm=vlm2, limit=6)
+    objects = [obj("Laptop"), obj("Pan"), obj("Mug"), obj("Bowl"), obj("Statue")]
+    text = h2.update(meta(objects), {}, "", 1)
+    body = [l for l in text.splitlines() if l.startswith("- ")]
+    assert len(body) <= 3, text                # tier1 + tier3/4 各 1
+
+
+def test_held_object_reported_without_position():
+    vlm = StubVLM(["Egg"])
+    h = tp.TargetHinter("crack the egg", vlm=vlm)
+    text = h.update(meta([obj("Pan")], held="Egg"), {}, "Egg", 1)
+    assert "Egg（手持/容器内容" in text, text
+
+
+def main():
+    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+    failed = 0
+    for fn in tests:
+        try:
+            fn()
+            print(f"ok   {fn.__name__}")
+        except AssertionError as exc:
+            failed += 1
+            print(f"FAIL {fn.__name__}: {exc}")
+    print(f"\n{len(tests) - failed}/{len(tests)} passed")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

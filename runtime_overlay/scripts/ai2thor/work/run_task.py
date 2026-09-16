@@ -223,8 +223,10 @@ def load_task_from_folder(task_folder_path: str) -> Dict[str, Any]:
         with open(task_json_path, "r", encoding="utf-8") as f:
             task_data = json.load(f)
 
-        # Normalize success conditions: keep both the legacy single-dict form
-        # and the list form so evaluators (create_evaluator_from_config) work.
+        # 官方 evaluator（evaluation.ai2thor create_evaluator_from_config）
+        # 读取的是 success_conditions（复数键）+ success_logic；仅有单数键
+        # 会导致其走 legacy 分支并对 list 调 .get() 抛异常，从而所有任务
+        # 恒判失败。这里把 task.json 的两种写法都归一化。
         success_condition = task_data.get("success_condition")
         success_conditions = task_data.get("success_conditions")
         if success_condition is None:
