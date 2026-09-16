@@ -110,18 +110,18 @@ class ObjectMemory:
         self.agent_yaw: float = 0.0
 
     # -- updates -----------------------------------------------------
-    def observe(self, metadata: Dict, step: int) -> None:
-        """Fold one step of world-model metadata into the memory."""
-        if not isinstance(metadata, dict):
+    def observe(self, wm_metadata: Dict, step: int) -> None:
+        """Fold one step of the world model's own metadata into the memory."""
+        if not isinstance(wm_metadata, dict):
             return
-        agent = metadata.get("agent") or {}
+        agent = wm_metadata.get("agent") or {}
         apos = agent.get("position") or {}
         ax, az = apos.get("x"), apos.get("z")
         yaw = float((agent.get("rotation") or {}).get("y") or 0.0)
         if ax is not None and az is not None:
             self.agent_xy = (float(ax), float(az))
             self.agent_yaw = yaw
-        for obj in metadata.get("objects") or []:
+        for obj in wm_metadata.get("objects") or []:
             if not isinstance(obj, dict):
                 continue
             otype = str(obj.get("objectType") or "")
@@ -140,7 +140,7 @@ class ObjectMemory:
                 entry["direction"] = _direction_word(
                     float(pos["x"]) - float(ax),
                     float(pos.get("z") or 0.0) - float(az), yaw)
-        inv = metadata.get("inventoryObjects") or []
+        inv = wm_metadata.get("inventoryObjects") or []
         self.held = str((inv[0] or {}).get("objectType") or "") if inv else ""
 
     def record_interaction(self, step: int, action_name: Optional[str],

@@ -41,10 +41,6 @@ def _load_rgb(image_path: Optional[str]):
     except Exception:
         return None
 
-# Receptacles / surfaces that both the hidden-location advisor and the
-# commonsense search priors consume as candidates.
-
-
 def _similarity2d(src, dst):
     """2-D similarity (scale, R, t) with dst ~= scale*R*src + t (Umeyama)."""
     ms = src.mean(axis=0)
@@ -139,7 +135,6 @@ class WorldModel:
         moved: Optional[bool] = None,
         action_ok: Optional[bool] = None,
         frame: Any = None,
-        env: Any = None,
     ) -> Dict:
         """Fuse one step into the world model.
 
@@ -147,11 +142,14 @@ class WorldModel:
         two images the agent was shown (``self_observation.estimate_success``):
         ``mse > 1`` -> True (the action did something), ``mse < 1`` -> False.
         ``None`` means the frames were unavailable.
+
+        The environment object is deliberately not a parameter: the only
+        things this method may look at are the image the agent was shown
+        (``observation.image_path``) and the action it took.
         """
         self._step += 1
         action = action or {}
         action_name = action.get("action_name")
-        # NOTE: no access to env.controller / observation.metadata here.
         agent_pos, agent_rot = self._resolve_pose(action, moved)
         ax, az = agent_pos.get("x"), agent_pos.get("z")
         if ax is not None and az is not None:
@@ -263,7 +261,7 @@ class WorldModel:
         # difference is the accumulated drift -> shift everything back.
         self._apply_drift_correction(delta, best_sim)
 
-    def _apply_drift_correction(self, delta_xy, sim: float) -> None:
+    def _apply_drift_correction(self, delta_xy, similarity: float) -> None:
         dx, dz = float(delta_xy[0]), float(delta_xy[1])
         self._pose[0] += dx
         self._pose[2] += dz
@@ -274,9 +272,11 @@ class WorldModel:
         if di or dj:
             self._visited = {(i + di, j + dj) for (i, j) in self._visited}
         self.n_closure += 1
-        self.last_correction = (self._step, round(dx, 2), round(dz, 2), round(sim, 3))
+        self.last_correction = (self._step, round(dx, 2), round(dz, 2),
+                                round(similarity, 3))
         print(f"↻ loop closure #{self.n_closure} @step {self._step}: "
-              f"drift 修正 dx={dx:+.2f}m dz={dz:+.2f}m (cos={sim:.3f})", flush=True)
+              f"drift 修正 dx={dx:+.2f}m dz={dz:+.2f}m "
+                      f"(cos={similarity:.3f})", flush=True)
 
     def _perceive_detections(
         self, detections, depth_map, agent_pos, agent_rot

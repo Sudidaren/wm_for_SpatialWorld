@@ -24,7 +24,10 @@ MOVE_ACTIONS = frozenset({
 ROTATE_ACTIONS = frozenset({
     "RotateLeft", "RotateRight", "LookUp", "LookDown", "Crouch", "Stand",
 })
-#: interactions / state changes
+#: actions that change an object's state rather than the agent's pose.
+#: The runtime's own policy never branches on this list (outcomes come from
+#: the frame difference); it is the shared action taxonomy used by the
+#: offline frame-census / evidence-collection scripts in the eval repo.
 INTERACTION_ACTIONS = frozenset({
     "PickupObject", "PutObject", "DropHandObject", "ThrowObject",
     "OpenObject", "CloseObject", "ToggleObjectOn", "ToggleObjectOff",

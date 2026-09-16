@@ -9,7 +9,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import re
 import sys
 import time
 from datetime import datetime
@@ -19,7 +18,6 @@ from mllm_base_agent.agent.state import AgentState
 from actions.response_parser import parse_vlm_response
 from actions.max_steps import resolve_max_steps_from_task
 from mllm_base_agent.llm.messages import AIMessage, HumanMessage, SystemMessage
-from mllm_base_agent.llm.provider import get_vlm
 from mllm_base_agent.prompts import get_system_prompt
 
 LOCAL_RETRY_CONFIG = {
@@ -87,7 +85,6 @@ def _cap_history(state: AgentState, cap: int = HISTORY_CAP) -> None:
             pass
 
 EXTERNAL_FAILURE_TYPES = {'api_error', 'env_error', 'external_error'}
-MODEL_FAILURE_TYPES = {'parse_error', 'action_error', 'model_error'}
 
 
 def _object_query_cfg(state: AgentState) -> dict:
@@ -106,14 +103,6 @@ class ParseRetryError(Exception):
 
 class APIRetryError(Exception):
     pass
-
-
-def _success_value_for_failure_type(failure_type: Optional[str]) -> Optional[bool]:
-    if failure_type in EXTERNAL_FAILURE_TYPES:
-        return None
-    if failure_type:
-        return False
-    return None
 
 
 def _normalize_token_usage(raw_usage: Optional[dict]) -> Dict[str, int]:
@@ -652,10 +641,14 @@ def act_node(state: AgentState) -> AgentState:
                         # is disabled at runtime.
                         ckpt = (wm_cfg.get('perception_ckpt')
                                 or os.environ.get('PERCEPTION_CKPT'))
-                        if not ckpt and not wm_cfg.get('allow_sim_seg'):
+                        # No escape hatch: the WM must run on its own
+                        # perception runtime.  There is deliberately no
+                        # "allow simulator segmentation" option any more.
+                        if not ckpt:
                             raise RuntimeError(
-                                "world_model enabled without perception_ckpt: "
-                                "sim segmentation perception is disabled")
+                                "world_model enabled without perception_ckpt; "
+                                "simulator segmentation is not a supported "
+                                "perception backend")
                         if ckpt:
                             try:
                                 runtime_root = (
@@ -677,7 +670,6 @@ def act_node(state: AgentState) -> AgentState:
                         action=action,
                         moved=_ok,             # frame-diff outcome (mse>1)
                         action_ok=_ok,
-                        env=state.get('env'),
                     )
                 if os.environ.get('WM_DEBUG'):
                     print(
@@ -689,10 +681,9 @@ def act_node(state: AgentState) -> AgentState:
                         flush=True,
                     )
                 state['_mem_pending'] = probe.update(
-                    metadata=raw_meta,
+                    wm_metadata=raw_meta,
                     action_name=action.get('action_name'),
                     object_type=action.get('object_type'),
-                    env=state.get('env'),
                     blocked=action_blocked,   # frame diff, not error_message
                     action_ok=((raw_meta.get('action_outcome') or {}).get('ok')
                                if isinstance(raw_meta, dict) else _ok),
@@ -760,17 +751,6 @@ def act_node(state: AgentState) -> AgentState:
         state['short_term_history'] = state['short_term_history'][-max_history:]
     _cap_history(state)
     return state
-
-
-def _count_consecutive_failures(state: AgentState) -> int:
-    count = 0
-    for step in reversed(state.get('structured_trajectory', [])):
-        reward = step.get('reward')
-        if reward is None or reward < 0.05:
-            count += 1
-        else:
-            break
-    return count
 
 
 def _create_env_evaluator(env_type: str, task_config: dict):

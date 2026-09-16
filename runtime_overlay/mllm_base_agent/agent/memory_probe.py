@@ -14,8 +14,6 @@ arm never sees one, so the WM arm must not either.
 from __future__ import annotations
 
 import math
-import re
-import json
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -59,10 +57,9 @@ class MemoryProbe:
     def update(
         self,
         *,
-        metadata: Dict,
+        wm_metadata: Dict,
         action_name: Optional[str],
         object_type: Optional[str] = None,
-        env: Any = None,
         blocked: bool = False,
         action_ok: Optional[bool] = None,
         action_ok_source: Optional[str] = None,
@@ -76,18 +73,13 @@ class MemoryProbe:
         parts: List[str] = []
         try:
             self._tick += 1
-            objects = metadata.get("objects") or []
-            agent = metadata.get("agent") or {}
-            apos = agent.get("position") or {}
-            yaw = float((agent.get("rotation") or {}).get("y") or 0.0)
-            ax, az = apos.get("x"), apos.get("z")
             if action_name and object_type:
                 self._acts[str(object_type)] = (self._tick, str(action_name),
                                                 action_ok)
             if self._target_hint.get("enabled"):
                 from mllm_base_agent.agent import target_priority as tp
 
-                inv0 = metadata.get("inventoryObjects") or []
+                inv0 = wm_metadata.get("inventoryObjects") or []
                 held0 = str((inv0[0] or {}).get("objectType") or "") if inv0 else ""
                 hinter = self._hinter
                 if hinter is None:
@@ -100,10 +92,10 @@ class MemoryProbe:
                         max_sigma=float(self._target_hint.get("max_sigma", 0.5)),
                     )
                     self._hinter = hinter
-                block = hinter.update(metadata, self._acts, held0, self._tick)
+                block = hinter.update(wm_metadata, self._acts, held0, self._tick)
                 if block:
                     parts.append(block)
-            inv = metadata.get("inventoryObjects") or []
+            inv = wm_metadata.get("inventoryObjects") or []
             held = ""
             if inv:
                 held = str((inv[0] or {}).get("objectType") or "")

@@ -12,9 +12,9 @@ sees one, so the WM arm must not use one either).  Instead:
   3. everything else (tiers, quotas, "only memory", pose-triggered refresh,
      distance/sigma caps, predicate demotion) is unchanged.
 
-The only fixed strings left in this file are *verbs* (role markers used by the
-settled-predicate test to decide that a remembered item is already finished),
-not object names.
+The only fixed string left in this file is one *verb* pattern
+(``_DEST_VERB``, used by the settled-predicate test to read
+"put A into B" out of the instruction).  It contains no object names.
 """
 
 from __future__ import annotations
@@ -22,21 +22,12 @@ from __future__ import annotations
 import json
 import math
 import re
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 _DIRECTIONS = ("正前方", "右前方", "正右方", "右后方",
                "正后方", "左后方", "正左方", "左前方")
 
-#: role verbs for the settled-metadata test (no object names involved)
-_ROLE_VERB = (
-    r"(?:pick(?:ed|ing)?(?:\s+up)?|grab(?:bed)?|take|took|taking|bring|brought|"
-    r"put|placed?|drop(?:ped)?|throw|threw|toss(?:ed)?|open(?:ed)?|"
-    r"clos(?:e|ed|ing)|shut|turn(?:ed)?\s+(?:on|off)|switch(?:ed)?\s+(?:on|off)|"
-    r"toggle[d]?|slice[d]?|cut|chop(?:ped)?|cook(?:ed)?|heat(?:ed)?|"
-    r"wash(?:ed)?|clean(?:ed)?|wipe[d]?|rinse[d]?|fill(?:ed)?|empty|emptied|"
-    r"pour(?:ed)?|use[d]?|hold|held|set|leave|left|move[d]?|transfer(?:red)?|"
-    r"read|smash(?:ed)?|enable[d]?|disable[d]?|water(?:ed)?)"
-)
+#: destination verb, for the "put A into B" settled test (no object names)
 _DEST_VERB = r"(?:put|place|move|set|leave|bring|carry|throw|toss|transfer)"
 
 #: The agent-facing prompt for the one-shot extraction.  v2 (2026-09-16).
@@ -129,12 +120,13 @@ TIER_LABEL = {1: "任务目标", 2: "手持/容器内容", 3: "已交互", 4: "�
 def settled_by_predicate(instruction: str,
                          entries: Iterable[Tuple[str, str]],
                          states: Dict[str, Dict[str, Any]],
-                         contents: Dict[str, List[str]],
-                         holding: str = "") -> Set[str]:
+                         contents: Dict[str, List[str]]) -> Set[str]:
     """Detected types whose task predicate already holds, per WM's own ledger.
 
     Objects are addressed by the model's own names (matched to detected types
-    by :func:`match_names`), so no vocabulary is needed.
+    by :func:`match_names`), so no vocabulary is needed.  A held object is
+    deliberately never marked settled: the predicate tests below only look at
+    the ledger's state fields and container contents.
     """
     text = re.sub(r"\s+", " ", (instruction or "").lower())
     done: Set[str] = set()
@@ -185,8 +177,6 @@ def settled_by_predicate(instruction: str,
                          rf"\s+(?:the\s+)?[^.;]{{0,20}}", text) and \
                     tb in contents and ta in [str(x) for x in contents[tb]]:
                 done.add(ta)
-    if holding and holding in states:
-        pass                      # 手持不算"已完成"，继续报
     return done
 
 
@@ -243,11 +233,11 @@ class TargetHinter:
         dyaw = abs((yaw - lyaw + 180) % 360 - 180)
         return dyaw >= 15.0 or math.hypot((x or 0.0) - lx, (z or 0.0) - lz) >= 0.25
 
-    def update(self, metadata: Dict,
+    def update(self, wm_metadata: Dict,
                acts: Dict[str, Tuple[int, str, Optional[bool]]],
                holding: str, step: int) -> str:
-        objects = [o for o in (metadata.get("objects") or []) if isinstance(o, dict)]
-        agent = metadata.get("agent") or {}
+        objects = [o for o in (wm_metadata.get("objects") or []) if isinstance(o, dict)]
+        agent = wm_metadata.get("agent") or {}
         apos = agent.get("position") or {}
         yaw = float((agent.get("rotation") or {}).get("y") or 0.0)
         ax, az = apos.get("x"), apos.get("z")
@@ -266,7 +256,6 @@ class TargetHinter:
                 by_type[tp] = obj
 
         entries = self.entries()
-        names = [env for env, _ in entries]
         # 匹配：先用模型给的 env 名，匹配不上再退回它自己的说法
         matched: Dict[str, str] = {}
         for env_name, words in entries:
@@ -281,8 +270,7 @@ class TargetHinter:
         for tp, obj in by_type.items():
             if obj.get("contents"):
                 contents[tp] = list(obj["contents"])
-        settled = settled_by_predicate(self.task_desc, entries, states, contents,
-                                       holding)
+        settled = settled_by_predicate(self.task_desc, entries, states, contents)
 
         rows: List[Dict[str, Any]] = []
         candidates: Set[str] = set(wanted) | set(by_type) | ({holding} if holding else set())

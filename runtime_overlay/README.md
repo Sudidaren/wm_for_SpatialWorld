@@ -1,17 +1,18 @@
 # LightWM runtime overlay（相对官方 SpatialWorld 的全部代码改动）
 
-> **2026-09-16 更新**：overlay 已重刷为"无作弊 WM v2"运行时（47 个文件）。
+> **2026-09-16 更新**：overlay 已重刷为"无作弊 WM v2"运行时（**53 个文件**），
 > 与 `SpatialWorld` 本地工作区逐字节一致，`MANIFEST.sha256` 已重建。
-> 完整交接说明见 [`docs/HANDOVER_2026-09-16.md`](../docs/HANDOVER_2026-09-16.md)。
+> 逐文件说明见 [`INVENTORY.md`](INVENTORY.md)，完整交接见
+> [`docs/HANDOVER_2026-09-16.md`](../docs/HANDOVER_2026-09-16.md)。
 
 ## 这是什么
 
 `runtime_overlay/` 里的文件 = 相对官方
 `github.com/Hongcheng-Gao/SpatialWorld`（commit `f47b1e0`，main）的全部 LightWM
-代码改动（47 个文件）。克隆官方仓库后把这些文件覆盖过去，再按下面脚本
+代码改动（53 个文件）。克隆官方仓库后把这些文件覆盖过去，再按下面脚本
 校验，即可得到与本地一致的运行时代码。
 
-## 怎么用（博士侧，两条命令）
+## 怎么用（三条命令）
 
 ```bash
 # 0) 前提：机器上已按官方 README 装好 SpatialWorld 环境（venv/模拟器/API key）
@@ -24,12 +25,22 @@ git clone git@github.com:Sudidaren/wm_for_SpatialWorld.git lightwm
 # 2) 应用 overlay 并校验
 bash lightwm/runtime_overlay/setup_lightwm_runtime.sh \
     --repo $(pwd) --overlay lightwm/runtime_overlay
+
+# 3) 一条命令验证"拉下来即可用、且没有任何作弊通道"
+bash lightwm/runtime_overlay/verify_delivery.sh \
+    --repo $(pwd) --overlay lightwm/runtime_overlay
 ```
 
-校验通过 = 47 个文件与本地逐字节一致（sha256）。
+`verify_delivery.sh` 会依次检查：① 53 个文件 sha256 一致；② overlay 里没有未登记的
+文件（无冗余）；③ 运行时可编译；④ **信息隔离审计 + 功能冒烟**（`tests/test_wm_delivery.py`：
+无模拟器通道 / 无任务真值 / 无对象词表，且记忆读数、目标提示、CheckState、锚点与位姿
+都能真的跑出来）；⑤ 其余三组单测。全程不需要 GPU、模拟器和模型权重。
 
-> **2026-09-16 实测**：在一个干净的 `f47b1e0` worktree 上执行本脚本，
-> 47/47 全部 `sha256 OK`，且应用后的运行时 `python3 -m py_compile` 通过。
+校验通过 = 53 个文件与本地逐字节一致（sha256）。
+
+> **2026-09-16 实测**：在一个干净的 `f47b1e0` worktree 上执行上面三条命令，
+> 53/53 `sha256 OK`、`verify_delivery.sh` **7 个步骤全过**（含 13 项信息隔离
+> 审计与功能冒烟、7+9+10 项单测）。
 > overlay 只做"新增 + 覆盖"，官方 `mllm_base_agent/agent/` 在 f47b1e0 只有
 > 4 个文件（`__init__.py` / `graph.py` / `runner.py` / `state.py`），
 > 其余运行时文件全部由本 overlay 提供，**不需要手工删除任何官方文件**。
