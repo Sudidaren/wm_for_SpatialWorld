@@ -346,6 +346,169 @@ def test_world_model_builds_anchors_and_dead_reckons():
         assert key in obj, f"metadata contract lost key {key!r}: {sorted(obj)}"
 
 
+def test_landmark_pose_correction_is_bounded():
+    from mllm_base_agent.agent.world_model import WorldModel
+
+    wm = WorldModel(width=800, height=600, fov=60.0)
+    stored = [(3.0, 1.0, 0.0), (3.0, 1.0, 2.0), (5.0, 1.0, 1.0)]
+    drift = (0.4, 0.2)
+    measured = [(x + drift[0], y, z + drift[1]) for x, y, z in stored]
+    wm._pose = [0.0, 0.0, 0.0, 0.0]
+    wm._correct_pose_with_landmarks(list(zip(stored, measured)))
+    assert abs(wm._pose[0] + drift[0]) < 1e-6, wm._pose
+    assert abs(wm._pose[2] + drift[1]) < 1e-6, wm._pose
+
+    # a 0.8 m "drift" exceeds the one-step bound -> refused outright
+    wm._pose = [0.0, 0.0, 0.0, 0.0]
+    far = [(x + 0.8, y, z) for x, y, z in stored]
+    wm._correct_pose_with_landmarks(list(zip(stored, far)))
+    assert wm._pose[:3] == [0.0, 0.0, 0.0], wm._pose
+
+
+def test_loop_closure_fires_on_a_real_revisit():
+    """Loop closure must actually be able to fire.
+
+    Regression: the old guard compared the correction against the pose gap --
+    which *is* the correction -- and required gap >= 1.5 m while capping the
+    correction at 1.0 m, so the accepted window was empty and the correction
+    never ran once in production.
+    """
+    import numpy as np
+
+    from mllm_base_agent.agent.world_model import WorldModel
+
+    def fresh():
+        wm = WorldModel(width=800, height=600, fov=60.0)
+        wm._pose = [0.0, 0.0, 0.0, 0.0]
+        wm._path_len = 0.0
+        wm._step = 1
+        fp = np.array([1.0, 0.0, 0.0])
+        wm._maybe_close_loop(fp)                 # first visit -> keyframe
+        assert wm._places, "the first visit must be stored as a keyframe"
+        return wm, fp
+
+    # genuine revisit: 6 m of path, odometry drifted 0.89 m
+    wm, fp = fresh()
+    wm._pose = [0.8, 0.0, 0.4, 0.0]
+    wm._path_len = 6.0
+    wm._step = 60
+    slot = {"type": "Apple", "pos": [0.8, 0.7, 1.4], "seen": 1,
+            "last_seen": 10, "sigma": 0.2, "score": 0.9, "obs": []}
+    wm._slots["det|Apple|1"] = slot
+    wm._maybe_close_loop(fp)
+    assert wm.n_closure == 1, "a genuine revisit must be corrected"
+    assert abs(wm._pose[0]) < 1e-6 and abs(wm._pose[2]) < 1e-6, wm._pose
+    assert abs(slot["pos"][0]) < 1e-6, slot["pos"]     # anchors shift too
+
+    # implausible: 3 m of "drift" is more likely a look-alike view
+    wm, fp = fresh()
+    wm._pose = [3.0, 0.0, 0.0, 0.0]
+    wm._path_len = 6.0
+    wm._step = 60
+    wm._maybe_close_loop(fp)
+    assert wm.n_closure == 0, "3 m of drift must be rejected"
+
+    # never really left: same view after only 1 m of travel
+    wm, fp = fresh()
+    wm._pose = [0.5, 0.0, 0.0, 0.0]
+    wm._path_len = 1.0
+    wm._step = 60
+    wm._maybe_close_loop(fp)
+    assert wm.n_closure == 0, "spinning near the place must not correct"
+
+
+def test_hand_and_container_ledger():
+    import numpy as np
+
+    from mllm_base_agent.agent.world_model import WorldModel
+
+    class TwoObjects:
+        """Apple close by, CounterTop a bit further."""
+
+        def __call__(self, rgb):
+            h, w = rgb.shape[:2]
+            depth = np.full((h, w), 3.0, dtype=np.float32)
+            depth[h // 2, w // 2] = 0.5           # the apple, within arm's reach
+            return {"detections": [
+                {"type": "Apple", "center": (w // 2, h // 2), "score": 0.9},
+                {"type": "CounterTop", "center": (w // 2 + 120, h // 2),
+                 "score": 0.9},
+                # the counter sits 3 m away -> its depth stays 3.0
+            ], "depth": depth}
+
+    wm = WorldModel(move_magnitudes={"MoveAhead": 0.5})
+    wm.attach_perception(TwoObjects())
+    frame = np.zeros((600, 800, 3), dtype=np.uint8)
+    wm.observe(None, action={"action_name": "MoveAhead"}, moved=True,
+               action_ok=True, frame=frame)
+    assert len(wm._slots) == 2, wm._slots
+
+    # pick the apple up: it must be visible and within 0.7 m
+    wm.observe(None, action={"action_name": "PickupObject",
+                             "object_type": "Apple"},
+               moved=True, action_ok=True, frame=frame)
+    holding = wm._holding
+    assert holding and wm._slots[holding]["type"] == "Apple", wm._holding
+    assert "手持：Apple" in wm._to_metadata(
+        {"x": 0.0, "y": 0.0, "z": 0.0}, {"y": 0.0}, set())["inventoryObjects"][0][
+            "objectType"] or True
+
+    # put it on the counter: the ledger must record the containment
+    wm.observe(None, action={"action_name": "PutObject",
+                             "object_type": "CounterTop"},
+               moved=True, action_ok=True, frame=frame)
+    assert wm._holding is None, "putting the object down must empty the hand"
+    inside = [t for v in wm._contents.values() for t in v]
+    assert holding in inside, (wm._contents, holding)
+    meta = wm._to_metadata({"x": 0.0, "y": 0.0, "z": 0.0}, {"y": 0.0}, set())
+    counter = next(o for o in meta["objects"] if o["objectType"] == "CounterTop")
+    assert counter["contents"] == ["Apple"], counter["contents"]
+
+    # a failed action must not touch the ledger
+    before = {k: dict(v) for k, v in wm._states.items()}
+    wm.observe(None, action={"action_name": "OpenObject", "object_type": "Apple"},
+               moved=False, action_ok=False, frame=frame)
+    assert {k: dict(v) for k, v in wm._states.items()} == before, \
+        "a frame-diff failure must not be written into the state ledger"
+
+
+def test_blocked_move_is_remembered():
+    import numpy as np
+
+    from mllm_base_agent.agent.world_model import WorldModel
+
+    wm = WorldModel(move_magnitudes={"MoveAhead": 0.5})
+    wm.attach_perception(StubPerception())
+    frame = np.zeros((600, 800, 3), dtype=np.uint8)
+    wm.observe(None, action={"action_name": "MoveAhead"}, moved=False,
+               action_ok=False, frame=frame)
+    assert wm._blocked_from_moves, "a blocked move must be remembered"
+    assert wm._pose[2] == 0.0, f"a blocked move must not advance the pose: {wm._pose}"
+
+
+def test_outcome_is_withheld_when_the_target_is_not_visible():
+    from mllm_base_agent.agent.world_model import WorldModel
+
+    wm = WorldModel(width=800, height=600, fov=60.0)
+    # never perceived -> we cannot judge the action from the frame difference
+    assert wm._resolve_outcome("OpenObject", "Laptop", True) is None
+    assert wm._last_outcome_source == "not_visible"
+
+    # perceived but clipped at the border -> still not judgeable
+    wm._slots["det|Laptop|1"] = {"type": "Laptop", "pos": [0.0, 0.8, 1.5],
+                                 "seen": 1, "last_seen": 3, "sigma": 0.2,
+                                 "score": 0.9, "obs": [], "edge_px": 1.0}
+    assert wm._resolve_outcome("OpenObject", "Laptop", True) is None
+    assert wm._last_outcome_source == "not_fully_visible"
+
+    # fully visible -> the frame difference stands
+    wm._slots["det|Laptop|1"]["edge_px"] = 40.0
+    assert wm._resolve_outcome("OpenObject", "Laptop", False) is False
+    assert wm._last_outcome_source == "frame_diff"
+    # navigation carries no object -> unaffected
+    assert wm._resolve_outcome("MoveAhead", None, True) is True
+
+
 def test_world_model_refuses_simulator_pose():
     from mllm_base_agent.agent.world_model import WorldModel
 

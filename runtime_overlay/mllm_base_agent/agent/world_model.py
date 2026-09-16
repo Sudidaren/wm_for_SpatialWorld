@@ -140,16 +140,23 @@ class WorldModel:
         # gap is meaningless.  A correction is now only accepted when the
         # agent has genuinely travelled away and come back.
         self.lc_sim_thr = 0.985       # cosine similarity that declares a revisit
-        self.lc_min_pose_gap = 1.5    # m; must have really left the place
+        #: m of *path* (odometry travel) that must separate the two visits.
+        #: This used to be a test on the pose gap between the current pose and
+        #: the stored keyframe -- but that gap *is* the drift we are trying to
+        #: correct, and it was paired with ``lc_max_correction = 1.0``, so the
+        #: accepted window was empty and loop closure never fired once in
+        #: production (0 hits across the three eval boxes, 2026-09-17).
+        self.lc_min_path = 2.0
         self.lc_min_step_gap = 12
         self.lc_keyframe_dist = 0.75  # m; min travel before storing a keyframe
         self.lc_max_correction = 1.0  # m; bigger "drift" is implausible
         self.lc_max_frac = 0.35       # correction must be small vs the odom gap
         self.lc_cooldown = 8          # steps between accepted corrections
         self._last_closure_step = -10 ** 9
-        self._places: List[tuple] = []   # (fingerprint, odom_xy, step)
+        self._places: List[tuple] = []   # (fingerprint, odom_xy, step, path)
         self.n_closure = 0
         self.last_correction: Optional[tuple] = None
+        self._path_len = 0.0             # odometry travel since the episode start
         self.landmark_correction = True
         self._perception = None         # PerceptionRuntime (dense+depth)
         self._last_outcome_source = "none"
@@ -271,27 +278,29 @@ class WorldModel:
         xy = np.array([self._pose[0], self._pose[2]], dtype=float)
         if (not self._places
                 or np.linalg.norm(xy - self._places[-1][1]) >= self.lc_keyframe_dist):
-            self._places.append((fp, xy.copy(), self._step))
+            self._places.append((fp, xy.copy(), self._step, self._path_len))
         best, best_sim = None, self.lc_sim_thr
-        for nfp, nxy, nstep in self._places[:-1]:
+        for nfp, nxy, nstep, npath in self._places[:-1]:
             if self._step - nstep < self.lc_min_step_gap:
                 continue
-            gap = float(np.linalg.norm(xy - nxy))
-            if gap < self.lc_min_pose_gap:
-                continue                # odometry thinks we are still there
+            travel = self._path_len - npath
+            if travel < self.lc_min_path:
+                continue                # we have not really been away and back
             sim = float(np.dot(fp, nfp))
             if sim > best_sim:
-                best, best_sim = (nxy, gap), sim
+                best, best_sim = (nxy, travel), sim
         if best is None:
             return
-        nxy, gap = best
+        nxy, travel = best
         if self._step - self._last_closure_step < self.lc_cooldown:
             return                      # do not chain corrections
         delta = nxy - xy
         mag = float(np.linalg.norm(delta))
-        # A revisit should explain a *modest* fraction of the odometry gap;
-        # anything larger is far more likely to be a look-alike view.
-        if mag > self.lc_max_correction or mag > self.lc_max_frac * gap:
+        # The correction may only explain a *modest* fraction of the path
+        # actually travelled since that keyframe, and never more than the
+        # absolute bound; anything bigger is far more likely to be a
+        # look-alike view than real drift.
+        if mag > self.lc_max_correction or mag > self.lc_max_frac * travel:
             return
         self._last_closure_step = self._step
         # odometry says `xy`, but this place was first seen at `best`; the
@@ -544,6 +553,7 @@ class WorldModel:
                 return
             self._pose[0] = x + dcx * mag
             self._pose[2] = z + dcz * mag
+            self._path_len += float(mag)
         elif name in ("RotateLeft", "RotateRight"):
             try:
                 deg = float(action.get("degrees") or action.get("magnitude") or 90.0)
@@ -814,6 +824,7 @@ class WorldModel:
             "_blocked_from_moves": sorted(self._blocked_from_moves),
             "_pose": list(self._pose) if self._pose else None,
             "_horizon": self._horizon,
+            "_path_len": self._path_len,
         }
         payload = self._jsonable(data)
         tmp = f"{path}.tmp"
@@ -894,6 +905,7 @@ class WorldModel:
             [float(v) for v in data["_pose"]] if data.get("_pose") else None
         )
         wm._horizon = float(data.get("_horizon") or 0.0)
+        wm._path_len = float(data.get("_path_len") or 0.0)
         wm._blocked_from_moves = {
             tuple(c) for c in data.get("_blocked_from_moves") or []
         }
