@@ -256,27 +256,6 @@ def _build_messages(state: AgentState, image_url: str) -> list:
     if mem_pending:
         current_content.append({'type': 'text', 'text': mem_pending})
         state['_mem_pending'] = ''
-    # task-level plan (optional): one text call at the first step, then a
-    # per-step progress line whose ticks come from the agent's action history
-    plan_cfg = ((state.get('config') or {}).get('memory_probe') or {}).get('plan') or {}
-    if plan_cfg.get('enabled'):
-        from mllm_base_agent.agent import plan as plan_mod
-
-        if state.get('_plan') is None:
-            plan = plan_mod.decompose(
-                state.get('vlm'), state.get('task_prompt', ''),
-                variant=str(plan_cfg.get('prompt', 'new')))
-            state['_plan'] = plan
-            state['_plan_done'] = 0
-            print(f"\n[Plan] {len(plan)} subgoals "
-                  f"(prompt={plan_cfg.get('prompt', 'new')})", flush=True)
-            for i, step in enumerate(plan, 1):
-                print(f"   {i}. {step.get('goal', '')}", flush=True)
-        plan_line = plan_mod.render(state.get('_plan') or [],
-                                    int(state.get('_plan_done', 0) or 0))
-        if plan_line:
-            state['_plan_line'] = plan_line
-            current_content.append({'type': 'text', 'text': plan_line})
     # opt-in: teach the query syntax once, then repeat the WM memory readout
     oq_cfg = _object_query_cfg(state)
     if oq_cfg.get('enabled'):
@@ -330,8 +309,6 @@ def think_node(state: AgentState) -> AgentState:
                               and _p.get('type') == 'image_url')
         print(f"[timing] 组装消息(含历史图编码) {time.time()-_t_build:.2f}s "
               f"消息数={len(messages)} 本次请求图片数={_n_img}", flush=True)
-    if state.get('_plan_line'):
-        mem_hint_snapshot = (mem_hint_snapshot + '\n' + state['_plan_line']).strip()
     last_error: Optional[BaseException] = None
     response_text: Optional[str] = None
     step_token_usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'api_calls': 0}
@@ -724,14 +701,6 @@ def act_node(state: AgentState) -> AgentState:
         last_conv['action_executed'] = action_name
         last_conv['reward'] = 0 if action_type in ('task_completion', 'internal_noop') else getattr(observation, 'reward', 0)
         last_conv['error_message'] = error_message
-
-    # tick off plan progress from the agent's own action history
-    if state.get('_plan'):
-        from mllm_base_agent.agent import plan as plan_mod
-
-        state['_plan_done'] = plan_mod.advance(
-            state['_plan'], int(state.get('_plan_done', 0) or 0),
-            action_name, action.get('object_type'))
 
     context = (state.get('config') or {}).get('context_management') or {}
     configured_history = int(context.get('short_term_history_window_size', MODEL_HISTORY_TURNS) or MODEL_HISTORY_TURNS)

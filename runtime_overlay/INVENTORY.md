@@ -1,4 +1,4 @@
-# runtime_overlay 文件清单（53 个）
+# runtime_overlay 文件清单（52 个）
 
 每一个文件都说明了**为什么必须随包发布**。没有无法解释的残留文件：
 `verify_delivery.sh` 的第 2 步会检查"overlay 里有没有未列进 MANIFEST 的文件"，
@@ -6,7 +6,7 @@
 
 图例：**新增** = 官方 `f47b1e0` 没有这个文件；**修补** = 官方有，我们改了行为。
 
-## A. WM 运行时本体（6 个，新增）——本方法的核心
+## A. WM 运行时本体（5 个，新增）——本方法的核心
 
 | 文件 | 作用 | 少了他会怎样 |
 |---|---|---|
@@ -15,7 +15,6 @@
 | `mllm_base_agent/agent/self_observation.py` | 帧差判动作成败（MSE>1），替代模拟器 error_message | 只能退回读模拟器错误串（作弊） |
 | `mllm_base_agent/agent/target_priority.py` | 目标物位置提示（`WM_TARGET_HINT`，默认关） | 消融开关失效 |
 | `mllm_base_agent/agent/object_query.py` | `CheckState()` 完成前查状态（`WM_STATE_CHECK`，默认关） | 消融开关失效 |
-| `mllm_base_agent/agent/plan.py` | 子目标分解（`WM_PLAN=off/old/new`，默认 off） | 消融开关失效 |
 
 ## B. 官方文件的行为修补（6 个，修补）——每一处都有非改不可的理由
 

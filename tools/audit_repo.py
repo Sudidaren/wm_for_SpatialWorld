@@ -41,6 +41,7 @@ RULES = (
     ("wm_modules/", "external WM modules", "separate contribution"),
     ("pack_v3/", "data packaging", "cloud upload helper"),
     ("scripts/", "perception setup helpers", "RF-DETR download/check"),
+    ("tools/", "repo tooling", "repository / delivery audits"),
     ("configs/", "perception config", "detector label space"),
     ("data/", "task sets & splits", "frozen splits used by training"),
     ("tests/", "tests", "perception runtime + weight download tests"),
@@ -124,8 +125,11 @@ def main() -> int:
     dupes = [name for name, n in collections.Counter(
         os.path.basename(f) for f in files if f.endswith(".py")).items() if n > 1]
     real_dupes = [d for d in dupes if d != "__init__.py"]
-    if real_dupes == ["run_task.py"]:
-        note = "run_task.py only (one per environment: ai2thor / procthor / carla)"
+    expected_dupes = {"run_task.py", "wrapper.py"}
+    if real_dupes and set(real_dupes) <= expected_dupes:
+        note = (", ".join(sorted(real_dupes))
+                + " -- one per environment (ai2thor / procthor / carla / "
+                  "embodiedcity / virtualhome), loaded by path, so no shadowing")
     else:
         note = ", ".join(real_dupes) or "none (only __init__.py)"
     print(f"\nPython modules sharing a basename: {note}")

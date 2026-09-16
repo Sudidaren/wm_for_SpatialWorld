@@ -1,6 +1,6 @@
 # LightWM runtime overlay（相对官方 SpatialWorld 的全部代码改动）
 
-> **2026-09-16 更新**：overlay 已重刷为"无作弊 WM v2"运行时（**53 个文件**），
+> **2026-09-16 更新**：overlay 已重刷为"无作弊 WM v2"运行时（**52 个文件**），
 > 与 `SpatialWorld` 本地工作区逐字节一致，`MANIFEST.sha256` 已重建。
 > 逐文件说明见 [`INVENTORY.md`](INVENTORY.md)，完整交接见
 > [`docs/HANDOVER_2026-09-16.md`](../docs/HANDOVER_2026-09-16.md)。
@@ -9,7 +9,7 @@
 
 `runtime_overlay/` 里的文件 = 相对官方
 `github.com/Hongcheng-Gao/SpatialWorld`（commit `f47b1e0`，main）的全部 LightWM
-代码改动（53 个文件）。克隆官方仓库后把这些文件覆盖过去，再按下面脚本
+代码改动（52 个文件）。克隆官方仓库后把这些文件覆盖过去，再按下面脚本
 校验，即可得到与本地一致的运行时代码。
 
 ## 怎么用（三条命令）
@@ -31,15 +31,15 @@ bash lightwm/runtime_overlay/verify_delivery.sh \
     --repo $(pwd) --overlay lightwm/runtime_overlay
 ```
 
-`verify_delivery.sh` 会依次检查：① 53 个文件 sha256 一致；② overlay 里没有未登记的
+`verify_delivery.sh` 会依次检查：① 52 个文件 sha256 一致；② overlay 里没有未登记的
 文件（无冗余）；③ 运行时可编译；④ **信息隔离审计 + 功能冒烟**（`tests/test_wm_delivery.py`：
 无模拟器通道 / 无任务真值 / 无对象词表，且记忆读数、目标提示、CheckState、锚点与位姿
 都能真的跑出来）；⑤ 其余三组单测。全程不需要 GPU、模拟器和模型权重。
 
-校验通过 = 53 个文件与本地逐字节一致（sha256）。
+校验通过 = 52 个文件与本地逐字节一致（sha256）。
 
 > **2026-09-16 实测**：在一个干净的 `f47b1e0` worktree 上执行上面三条命令，
-> 53/53 `sha256 OK`、`verify_delivery.sh` **7 个步骤全过**（含 13 项信息隔离
+> 52/52 `sha256 OK`、`verify_delivery.sh` **7 个步骤全过**（含 14 项信息隔离
 > 审计与功能冒烟、7+9+10 项单测）。
 > overlay 只做"新增 + 覆盖"，官方 `mllm_base_agent/agent/` 在 f47b1e0 只有
 > 4 个文件（`__init__.py` / `graph.py` / `runner.py` / `state.py`），
@@ -70,14 +70,16 @@ export LIGHTWM_DATA_ROOT=/data/lightwm_data       # 6 个数据池根（见 ligh
   物品名由模型开局自由文本自述，**无词表、无别名表**
 - `object_query.py`（新）：`CheckState()` 完成前查状态（**默认关**，`WM_STATE_CHECK=1` 开）；
   不拦 DONE；通用 `Query(<物体>)` 已砍
-- `plan.py`（新）：子目标分解 `WM_PLAN=off|old|new`（**默认 off**）
 - `runner.py`：接线与计量（tokens / api_calls / 步数），无 `perception_ckpt` 直接报错
 
-**相对上一版 overlay 被移除的三个模块（不必手工删，官方仓库里本来就没有）**
+**相对上一版 overlay 被移除的模块（不必手工删，官方仓库里本来就没有）**
 
 - `mllm_base_agent/agent/failure_detection.py`（读模拟器真值判成败 → 改为帧差）
 - `mllm_base_agent/agent/noisy_observer.py`（旧信息隔离层）
 - `mllm_base_agent/agent/subgoals.py`（旧子目标分解）
+- `mllm_base_agent/agent/plan.py`（任务级子目标分解，2026-09-17 删除：无收益，
+  且会在上下文里多塞一份机器生成的计划。`runner.py` 里的接线、`wm_config_patch`
+  的 `WM_PLAN` 开关一并移除；`run_ablation.sh` 的 `plan` 位置参数保留但已不再被读取）
 
 它们只存在于**旧版** overlay 里，是早期实验的产物；现在这套运行时不再需要，
 官方 `f47b1e0` 也从未包含它们，所以照上文两条命令操作即可，无需删除动作。

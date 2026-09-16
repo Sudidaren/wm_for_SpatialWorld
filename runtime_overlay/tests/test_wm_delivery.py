@@ -44,7 +44,6 @@ WM_FILES = (
     "target_priority.py",
     "object_query.py",
     "self_observation.py",
-    "plan.py",
 )
 
 #: Simulator-only *attributes*: reaching any of these means the WM read
