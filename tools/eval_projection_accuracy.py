@@ -182,6 +182,10 @@ def project_center_sample(gt, agent_pos, yaw, horizon, depth_m,
             err3d_new=float(np.linalg.norm(p_new - gt)),
             errh_old=float(np.hypot(p_old[0] - gt[0], p_old[2] - gt[2])),
             errh_new=float(np.hypot(p_new[0] - gt[0], p_new[2] - gt[2])),
+            # how far the two models place the same pixel horizontally --
+            # this is what actually differs for a run that never shows
+            # positions to the model (hand/contents coupling only)
+            delta_xz=float(np.hypot(p_old[0] - p_new[0], p_old[2] - p_new[2])),
             errz_old=float(abs(p_old[1] - gt[1])),
             errz_new=float(abs(p_new[1] - gt[1])),
         ),
@@ -340,6 +344,12 @@ def main() -> int:
         o, n = med(key + "_old"), med(key + "_new")
         print(f"{label:<28}{o:>12.3f}{n:>12.3f}{(o - n) / o * 100:>13.1f}%")
 
+    dxz = sorted(r["delta_xz"] for r in rows)
+    def pct(q):
+        return dxz[min(len(dxz) - 1, int(q * len(dxz)))]
+    print()
+    print("horizontal disagreement between the two models (same pixel):")
+    print(f"  median {pct(0.5):.3f} m   p90 {pct(0.9):.3f} m   p99 {pct(0.99):.3f} m")
     print()
     print("by camera pitch:")
     print(f"{'horizon':<12}{'n':>7}{'3D old':>10}{'3D new':>10}{'Δ':>9}")
