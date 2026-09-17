@@ -26,6 +26,11 @@ _COV_ROOT = os.environ.get("LIGHTWM_COV_ROOT", "/mnt/d/lightwm_data_cov")
 _COV2_ROOT = os.environ.get("LIGHTWM_COV2_ROOT", "/mnt/d/lightwm_data_cov2")
 _PROCTHOR2_ROOT = os.environ.get("LIGHTWM_PROCTHOR2_ROOT",
                                  "/mnt/d/lightwm_data_procthor2")
+#: Procedural houses that ship with the AI2-THOR build itself (FloorPlan_Val*).
+#: The evaluation's ProcTHOR tasks run on the *train* partition of procTHOR-10k,
+#: so these validation houses are non-evaluation too.
+_VALHOUSE_ROOT = os.environ.get("LIGHTWM_VALHOUSE_ROOT",
+                                "/mnt/d/lightwm_data_valhouses")
 _OBJVIEW_ROOT = os.environ.get("LIGHTWM_OBJVIEW_ROOT",
                                "/mnt/d/lightwm_data_objviews")
 _PROCTHOR_ROOT = os.environ.get("LIGHTWM_PROCTHOR_ROOT",
@@ -40,12 +45,14 @@ EPISODES_GLOBS = [
     os.path.join(_OBJVIEW_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_PROCTHOR_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_PROCTHOR2_ROOT, "episodes", "*", "episode.json"),
+    os.path.join(_VALHOUSE_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_VIRTUALHOME_ROOT, "episodes", "*", "episode.json"),
 ]
 SCENE_GT_GLOBS = [
     os.path.join(_DATA_ROOT, "scene_gt", "*.json"),
     os.path.join(_COV_ROOT, "scene_gt", "*.json"),
     os.path.join(_COV2_ROOT, "scene_gt", "*.json"),
+    os.path.join(_VALHOUSE_ROOT, "scene_gt", "*.json"),
 ]
 DEFAULT_INDEX = os.environ.get(
     "LIGHTWM_INDEX",

@@ -40,6 +40,8 @@ def main() -> None:
     ap.add_argument("--position-step", type=int, default=3,
                     help="subsample reachable positions (every Nth)")
     ap.add_argument("--out", default="/mnt/d/lightwm_data_procthor")
+    ap.add_argument("--platform", default=os.environ.get("LIGHTWM_AI2THOR_PLATFORM") or None,
+                    help="ai2thor platform (CloudRendering uses the GPU)")
     args = ap.parse_args()
 
     import prior
@@ -58,7 +60,8 @@ def main() -> None:
         controller = ai2thor.controller.Controller(
             scene=house, width=800, height=600,
             renderDepthImage=True, renderInstanceSegmentation=True,
-            visibilityDistance=20, gridSize=0.25)
+            visibilityDistance=20, gridSize=0.25,
+            **({"platform": args.platform} if args.platform else {}))
         ev = controller.step(dict(action="GetReachablePositions"),
                              raise_for_failure=False)
         rp = ev.metadata.get("actionReturn", []) or []

@@ -139,6 +139,8 @@ def main() -> None:
     ap.add_argument("--out", default="/mnt/d/lightwm_data_cov")
     ap.add_argument("--max-cells", type=int, default=0)
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--platform", default=os.environ.get("LIGHTWM_AI2THOR_PLATFORM") or None,
+                    help="ai2thor platform (CloudRendering uses the GPU)")
     args = ap.parse_args()
 
     yaw_list = [i * 360.0 / args.yaws for i in range(args.yaws)]
@@ -151,11 +153,13 @@ def main() -> None:
 
     controller = ai2thor.controller.Controller(
         scene=args.scenes[0],
-        width=800, height=600,
+        width=800,
+        height=600,
         renderDepthImage=True,
         renderInstanceSegmentation=True,
         visibilityDistance=1.0,
         gridSize=0.25,
+        **({"platform": args.platform} if args.platform else {}),
     )
     print("controller ready")
 

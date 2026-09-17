@@ -15,3 +15,13 @@ phase_d/configs/
 
 # large index backups (local only)
 data/frame_index*.bak*
+
+# local scratch
+.venv-rfdetr/
+*.log
+
+# partner's separate module tree: kept out of this repository on purpose
+# (see docs/HANDOVER_2026-09-16.md and runtime_overlay/INVENTORY.md)
+wm_modules/
+
+upload_tars
