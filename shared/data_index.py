@@ -20,6 +20,12 @@ from typing import Any, Dict, List, Optional
 
 _DATA_ROOT = os.environ.get("LIGHTWM_DATA_ROOT", "/mnt/d/lightwm_data")
 _COV_ROOT = os.environ.get("LIGHTWM_COV_ROOT", "/mnt/d/lightwm_data_cov")
+#: Non-evaluation coverage pools.  These hold the 31 classic AI2-THOR rooms and
+#: the ProcTHOR-10k val houses that the SpatialWorld evaluation never touches,
+#: so frames from here can be trained on without leaking the evaluation rooms.
+_COV2_ROOT = os.environ.get("LIGHTWM_COV2_ROOT", "/mnt/d/lightwm_data_cov2")
+_PROCTHOR2_ROOT = os.environ.get("LIGHTWM_PROCTHOR2_ROOT",
+                                 "/mnt/d/lightwm_data_procthor2")
 _OBJVIEW_ROOT = os.environ.get("LIGHTWM_OBJVIEW_ROOT",
                                "/mnt/d/lightwm_data_objviews")
 _PROCTHOR_ROOT = os.environ.get("LIGHTWM_PROCTHOR_ROOT",
@@ -30,13 +36,16 @@ _VIRTUALHOME_ROOT = os.environ.get(
 EPISODES_GLOBS = [
     os.path.join(_DATA_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_COV_ROOT, "episodes", "*", "episode.json"),
+    os.path.join(_COV2_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_OBJVIEW_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_PROCTHOR_ROOT, "episodes", "*", "episode.json"),
+    os.path.join(_PROCTHOR2_ROOT, "episodes", "*", "episode.json"),
     os.path.join(_VIRTUALHOME_ROOT, "episodes", "*", "episode.json"),
 ]
 SCENE_GT_GLOBS = [
     os.path.join(_DATA_ROOT, "scene_gt", "*.json"),
     os.path.join(_COV_ROOT, "scene_gt", "*.json"),
+    os.path.join(_COV2_ROOT, "scene_gt", "*.json"),
 ]
 DEFAULT_INDEX = os.environ.get(
     "LIGHTWM_INDEX",

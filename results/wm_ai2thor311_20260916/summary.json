@@ -1,61 +1,56 @@
 {
-  "task_set": "ai2thor",
-  "n_tasks_total": 311,
-  "metric": "TSR = success / decided; failed_external excluded",
-  "pulled_at": null,
-  "models": {
-    "qwen3vl-8b": {
-      "label": "Qwen3-VL-8B-Instruct",
-      "decided": 272,
-      "wm_success": 14,
-      "wm_tsr": 0.0515,
-      "baseline_success": 6,
-      "baseline_tsr": 0.0221,
-      "wm_only": 11,
-      "baseline_only": 3,
-      "mcnemar_exact_p": 0.0574,
-      "premature_done": 23,
-      "premature_done_share_of_failures": 0.0891,
-      "step_limit": 224,
-      "step_limit_share_of_failures": 0.8682,
-      "avg_total_tokens": 291726
-    },
-    "kimivl-a3b": {
-      "label": "Kimi-VL-A3B-Instruct",
-      "decided": 262,
-      "wm_success": 6,
-      "wm_tsr": 0.0229,
-      "baseline_success": 5,
-      "baseline_tsr": 0.0191,
-      "wm_only": 4,
-      "baseline_only": 3,
-      "mcnemar_exact_p": 1.0,
-      "premature_done": 147,
-      "premature_done_share_of_failures": 0.5742,
-      "step_limit": 62,
-      "step_limit_share_of_failures": 0.2422,
-      "avg_total_tokens": 161888
-    },
-    "qwen3vl-30b": {
-      "label": "Qwen3-VL-30B-A3B",
-      "decided": 311,
-      "wm_success": 17,
-      "wm_tsr": 0.0547,
-      "baseline_success": 20,
-      "baseline_tsr": 0.0643,
-      "wm_only": 4,
-      "baseline_only": 7,
-      "mcnemar_exact_p": 0.5488,
-      "premature_done": 65,
-      "premature_done_share_of_failures": 0.2211,
-      "step_limit": 206,
-      "step_limit_share_of_failures": 0.7007,
-      "avg_total_tokens": 251154
-    }
+ "task_set": "ai2thor",
+ "n_tasks": 311,
+ "metric": "TSR = success/decided; failed_external excluded",
+ "note": "all arms fully decided (311/311) after backfilling rooms that hung under software rendering",
+ "models": {
+  "qwen3vl-8b": {
+   "arm": "Qwen3-VL-8B + WM",
+   "decided": 311,
+   "wm_success": 16,
+   "wm_tsr": 0.0514,
+   "baseline_success": 6,
+   "baseline_tsr": 0.0193,
+   "wm_only": 13,
+   "baseline_only": 3,
+   "mcnemar_exact_p": 0.0213,
+   "premature_done": 25,
+   "step_limit": 259,
+   "premature_done_share": 0.0847,
+   "step_limit_share": 0.878,
+   "avg_total_tokens": 284609
   },
-  "caveats": [
-    "8B / Kimi baselines come from their 438-task runs, of which only 267/311 AI2-THOR tasks were decided; pairing is restricted to the WM-decided subset.",
-    "The 30B WM arm was still running when this snapshot was taken.",
-    "Target hint (WM_TARGET_HINT) and CheckState (WM_STATE_CHECK) were OFF for every arm in this snapshot."
-  ]
+  "kimivl-a3b": {
+   "arm": "Kimi-VL-A3B + WM",
+   "decided": 311,
+   "wm_success": 7,
+   "wm_tsr": 0.0225,
+   "baseline_success": 6,
+   "baseline_tsr": 0.0193,
+   "wm_only": 4,
+   "baseline_only": 3,
+   "mcnemar_exact_p": 1.0,
+   "premature_done": 174,
+   "step_limit": 73,
+   "premature_done_share": 0.5724,
+   "step_limit_share": 0.2401,
+   "avg_total_tokens": 162518
+  },
+  "qwen3vl-30b": {
+   "arm": "Qwen3-VL-30B-A3B + WM",
+   "decided": 311,
+   "wm_success": 17,
+   "wm_tsr": 0.0547,
+   "baseline_success": 20,
+   "baseline_tsr": 0.0643,
+   "wm_only": 4,
+   "baseline_only": 7,
+   "mcnemar_exact_p": 0.5488,
+   "premature_done": 65,
+   "step_limit": 206,
+   "premature_done_share": 0.2211,
+   "step_limit_share": 0.7007,
+   "avg_total_tokens": 251153
+  }
+ }
 }

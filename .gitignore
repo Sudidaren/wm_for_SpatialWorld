@@ -12,3 +12,6 @@ checkpoints_v2/
 upload_tars/
 phase_d/configs/
 交接总结_2026-09-02.md
+
+# large index backups (local only)
+data/frame_index*.bak*
