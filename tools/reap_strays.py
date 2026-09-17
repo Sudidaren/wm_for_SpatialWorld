@@ -30,6 +30,10 @@ import time
 
 MATCHES = ("thor-", "work.run_task")
 
+#: Commands that legitimately live for hours (a whole collection run or a batch)
+#: -- their children are per-task/per-house processes and must be judged by age.
+PARENT_ENTRYPOINTS = ("work.run_task", "collect_", "run_ablation", "train_")
+
 
 def uptime_seconds() -> float:
     with open("/proc/uptime") as fh:
@@ -62,10 +66,21 @@ def iter_processes():
         yield pid, ppid, state, age, cmd
 
 
-def reap_once(max_age_h, dry_run: bool, log):
+def reap_once(max_age_h, dry_run: bool, log, child_age_h=None):
+    """child_age_h: age limit for a child of a live long-running parent.
+
+    A data-collection script keeps one *per-house* Unity process alive at a
+    time; a house never takes ``child_age_h`` hours, so a child older than that
+    is hung even though its parent is still running.
+    """
+    child_limit = (child_age_h if child_age_h is not None else max_age_h) * 3600
     killed = []
     me = os.getpid()
     my_group = os.getpgid(0)
+    # parent pid -> (cmdline, age)
+    parents = {}
+    for pid, ppid, state, age, cmd in iter_processes():
+        parents[pid] = (cmd, age)
     for pid, ppid, state, age, cmd in iter_processes():
         if pid == me or not cmd:
             continue
@@ -76,11 +91,21 @@ def reap_once(max_age_h, dry_run: bool, log):
                 continue                      # never kill our own group
         except OSError:
             continue
+        pcmd, _page = parents.get(ppid, ("", 0.0))
+        # A healthy Unity/worker always has one of OUR python scripts as its
+        # parent.  When that script dies the child is adopted by init -- which
+        # is PID 1 *or* /init (PID != 1) inside a container, so testing
+        # ``ppid == 1`` alone misses exactly the cases we care about.
+        parent_is_ours = ("python" in pcmd
+                          and any(m in pcmd for m in PARENT_ENTRYPOINTS))
         reason = None
-        if ppid == 1:
-            reason = "orphan (parent=1)"
+        if not parent_is_ours:
+            reason = f"orphan (parent is {pcmd.split()[0][:32] if pcmd else 'gone'})"
         elif age > max_age_h * 3600:
             reason = f"stale ({age/3600:.1f}h > {max_age_h}h)"
+        elif age > child_limit:
+            reason = (f"child of a live {pcmd.split()[-1][:24]} older than "
+                      f"{child_limit/3600:.1f}h")
         if reason is None:
             continue
         short = " ".join(cmd.split())[:90]
