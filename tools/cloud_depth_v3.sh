@@ -19,8 +19,24 @@
 set -u
 WM=${LIGHTWM_ROOT:-/root/lightwm_phases}
 DATA=/root/autodl-tmp
-PY=${LIGHTWM_PY:-/root/miniconda3/envs/ai2thor/bin/python}
-[ -x "$PY" ] || PY=$(command -v python3)
+# The box's interpreter layout has changed between sessions, so probe for one
+# that actually has torch with CUDA instead of hard-coding a path.
+pick_py() {
+  for cand in "${LIGHTWM_PY:-}" \
+              /root/miniconda3/envs/ai2thor/bin/python \
+              /root/miniconda3/bin/python \
+              /opt/conda/envs/ai2thor/bin/python \
+              /opt/conda/bin/python \
+              /usr/bin/python3 "$(command -v python3 2>/dev/null)"; do
+    [ -n "$cand" ] && [ -x "$cand" ] || continue
+    if "$cand" -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" \
+         >/dev/null 2>&1; then echo "$cand"; return 0; fi
+  done
+  return 1
+}
+PY=$(pick_py) || {
+  echo "no python with CUDA torch found; set LIGHTWM_PY=<interpreter>"; exit 1; }
+echo "python: $PY ($("$PY" -c 'import torch;print(torch.__version__)'))"
 
 export LIGHTWM_DATA_ROOT=$DATA/lightwm_data_cov2
 export LIGHTWM_COV_ROOT=$DATA/lightwm_data_cov          # <- the classic homes
