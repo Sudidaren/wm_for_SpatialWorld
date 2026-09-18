@@ -583,6 +583,46 @@ def test_camera_height_and_vertical_sign():
     assert abs(low[1] - expect) < 1e-9, (low[1], expect)
 
 
+def test_multi_view_triangulation_is_the_metric_position():
+    """Two rays through the true image points must land on the true object.
+
+    This is the metric anchor that does not depend on the depth head at all:
+    the ray through a pixel is fixed by the pixel and the intrinsics, and the
+    baseline comes from the agent's own odometry.  With the default weight the
+    slot position must come out at the intersection, not at a 0.6/0.4 blend
+    with the (scale-compressed) single-frame unprojection.
+    """
+    import numpy as np
+
+    from mllm_base_agent.agent import world_model as wm_mod
+
+    wm = wm_mod.WorldModel(width=800, height=600, fov=60.0)
+    assert wm.tri_weight == 1.0, wm.tri_weight
+    target = np.array([1.0, 0.8, 3.0])
+    oid = "det|Cup|1"
+    # a deliberately absurd starting position: if the blend still gives the
+    # triangulated point, the weight really is 1.0
+    wm._slots[oid] = {"type": "Cup", "pos": [9.9, 9.9, 9.9], "seen": 1,
+                      "obs": []}
+    fx, fy, cx, cy = wm_mod.camera_intrinsics(800, 600, 60.0)
+    for cam_x, cam_z, yaw in ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)):
+        cam = np.array([cam_x, wm_mod.CAMERA_Y, cam_z])
+        fwd, right, up = wm_mod.camera_basis(yaw, 0.0)
+        d = target - cam
+        z = float(np.dot(d, fwd))
+        u = cx + fx * float(np.dot(d, right)) / z
+        v = cy - fy * float(np.dot(d, up)) / z
+        wm._add_view_and_triangulate(
+            oid, u, v, z, {"x": cam_x, "y": 0.0, "z": cam_z},
+            {"y": yaw, "horizon": 0.0}, [9.9, 9.9, 9.9])
+    slot = wm._slots[oid]
+    pos = np.array(slot["pos"])
+    err = float(np.linalg.norm(pos - target))
+    assert err < 0.05, f"triangulated position off by {err:.3f} m ({pos})"
+    assert slot["tri_resid"] < 0.02, slot["tri_resid"]
+    assert slot["tri_views"] == 2, slot["tri_views"]
+
+
 def test_world_model_checkpoint_round_trip():
     """save() must produce complete JSON even with numpy inside a slot."""
     import json

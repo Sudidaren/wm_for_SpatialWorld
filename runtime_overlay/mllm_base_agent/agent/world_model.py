@@ -194,6 +194,27 @@ class WorldModel:
         self.landmark_correction = True
         self._perception = None         # PerceptionRuntime (dense+depth)
         self._last_outcome_source = "none"
+        # ---- how much to trust multi-view triangulation over one frame -----
+        # The monocular depth head is compressed on rooms it never trained on
+        # (predictions come out at 0.59-0.62x the true distance), and that bias
+        # is *systematic*: it does not average out.  The triangulated position,
+        # by contrast, is metric on its own -- the ray through a pixel depends
+        # only on the pixel, and the baseline comes from the agent's own
+        # 0.25 m/step odometry.  Blending 0.6*tri + 0.4*depth therefore keeps
+        # ~0.4*(1-0.62) = 16 % of the distance error, which is 0.32 m on a 2 m
+        # object -- comparable to the whole triangulation error.
+        #
+        # Measured offline on 707 held-out objects seen from >=0.5 m baselines
+        # (tools: the pair-median triangulation reported in
+        # results/depth_head_ab_20260918/SCALE_CALIBRATION_20260918.md):
+        # geometry-only 0.236 m vs 0.8 m for the depth-derived position, so
+        # with two well-separated views the triangulation is the better term.
+        # Set LIGHTWM_TRI_WEIGHT=0.6 to get the old behaviour back for an A/B.
+        try:
+            self.tri_weight = float(os.environ.get("LIGHTWM_TRI_WEIGHT", "1.0"))
+        except ValueError:
+            self.tri_weight = 1.0
+        self.tri_weight = min(1.0, max(0.0, self.tri_weight))
         if not pose_from_action_log and \
                 os.environ.get("LIGHTWM_ALLOW_SIM_POSE") != "1":
             raise ValueError(
@@ -471,10 +492,27 @@ class WorldModel:
         tri = self._triangulate(obs)
         if tri is None:
             return
-        # blend: triangulation gets 60 %, the single-frame estimate 40 %
-        slot["pos"] = [0.6 * tri[i] + 0.4 * float(measured_pos[i])
+        # Blend with the running estimate.  ``tri_weight`` defaults to 1.0
+        # because the single-frame term carries the depth head's systematic
+        # scale error (see __init__); the running estimate is the better
+        # fallback than this frame's raw unprojection.
+        w = self.tri_weight
+        slot["pos"] = [w * tri[i] + (1.0 - w) * float(slot["pos"][i])
                        for i in range(3)]
+        # keep the ray-fit residual so a run can be audited afterwards
+        slot["tri_resid"] = self._ray_residual(tri, obs)
+        slot["tri_views"] = len(obs)
         slot["sigma"] = max(0.10, float(slot.get("sigma", 0.25)) * 0.8)
+
+    @staticmethod
+    def _ray_residual(point, obs) -> float:
+        """Median distance from ``point`` to the observation rays (metres)."""
+        d = []
+        for c, r in obs:
+            v = np.asarray(point, dtype=float) - c
+            along = float(np.dot(v, r))
+            d.append(float(np.linalg.norm(v - r * along)))
+        return float(np.median(d)) if d else float("nan")
 
     def _camera_xyz(self, agent_pos, agent_rot) -> np.ndarray:
         return np.array([float(agent_pos.get("x") or 0.0),
