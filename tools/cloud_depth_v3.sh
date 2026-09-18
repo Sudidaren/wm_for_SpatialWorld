@@ -47,9 +47,18 @@ export LIGHTWM_VALHOUSE_ROOT=$DATA/lightwm_data_valhouses
 export LIGHTWM_OBJVIEW_ROOT=$DATA/lightwm_data_cov2
 export LIGHTWM_VIRTUALHOME_ROOT=$DATA/lightwm_data_cov2
 export LIGHTWM_SPLITS=$WM/data/splits_noneval.json
-# no route to huggingface.co on the box: the backbone comes from the cache
-export HF_HUB_OFFLINE=1
-export TRANSFORMERS_OFFLINE=1
+# The DINOv2 backbone comes from the local HF cache when it is there (the
+# boxes have no route to huggingface.co); otherwise fall back to the mirror,
+# which *is* reachable from AutoDL.  Deciding this here saves shipping a
+# 745 MB cache to a box that can just download the 90 MB backbone.
+if ls /root/.cache/huggingface/hub 2>/dev/null | grep -q dinov2; then
+  export HF_HUB_OFFLINE=1
+  export TRANSFORMERS_OFFLINE=1
+  echo "backbone: local HF cache"
+else
+  export HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+  echo "backbone: downloading from $HF_ENDPOINT"
+fi
 # keep the socket tmpdir off any fuse/network mount so DataLoader workers start
 export TMPDIR=/root/tmp
 mkdir -p "$TMPDIR" "$DATA/depth_v3"

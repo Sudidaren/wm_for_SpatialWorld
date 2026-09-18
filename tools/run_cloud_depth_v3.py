@@ -6,6 +6,7 @@ everything *around* that: it checks the link, uploads the pool the box is
 missing, syncs the code, starts training and (optionally) pulls the artefacts
 back.  Run one step at a time:
 
+    python3 tools/run_cloud_depth_v3.py speed           # 12 s upload probe
     python3 tools/run_cloud_depth_v3.py check           # what is on the box?
     python3 tools/run_cloud_depth_v3.py upload-pool     # classic homes, 2.5 GB
     python3 tools/run_cloud_depth_v3.py sync-code       # repo + splits
@@ -81,6 +82,39 @@ def step_status(c) -> int:
                  "--format=csv,noheader 2>/dev/null | head -1; "
                  f"ls -d {DATA}/* 2>/dev/null | head -12; "
                  f"ls {DATA}/lightwm_data_cov/episodes 2>/dev/null | wc -l"))
+    return 0
+
+
+def step_speed(c, seconds: int = 12) -> int:
+    """Measure this box's upload link before committing 31 GB to it.
+
+    The three AutoDL instances are in different regions and the routes differ
+    wildly: weste took a 17 MB/s tar stream, cqa1 measured 0.4 MB/s, which
+    turns a 40-minute job into a 21-hour one.  Twelve seconds tells us which
+    one we are on, using a buffer in memory so no local disk is involved.
+    """
+    chunk = b"\0" * (2 << 20)
+    sftp = c.open_sftp()
+    f = sftp.file(f"{DATA}/_speed.bin", "wb")
+    t0 = time.time()
+    n = 0
+    while time.time() - t0 < seconds:
+        f.write(chunk)
+        n += len(chunk)
+    dt = time.time() - t0
+    f.close()
+    try:
+        sftp.remove(f"{DATA}/_speed.bin")
+    except IOError:
+        pass
+    sftp.close()
+    mbps = n / 1e6 / dt
+    hours = 31_000 / mbps / 3600 if mbps else float("inf")
+    print(f"upload {mbps:.2f} MB/s  ({n/1e6:.0f} MB in {dt:.0f}s)")
+    print(f"-> the 31 GB of pools would take {hours:.1f} h")
+    if mbps < 3:
+        print("-> too slow: prefer a card in the same region as weste "
+              "(17 MB/s measured), or train locally")
     return 0
 
 
@@ -190,7 +224,7 @@ def step_pull(c) -> int:
     return 0
 
 
-STEPS = {"status": step_status, "check": step_check,
+STEPS = {"status": step_status, "speed": step_speed, "check": step_check,
          "upload-pool": step_upload_pool, "sync-code": step_sync_code,
          "train": step_train, "watch": step_watch, "pull": step_pull}
 
