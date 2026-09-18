@@ -215,6 +215,32 @@ class WorldModel:
         except ValueError:
             self.tri_weight = 1.0
         self.tri_weight = min(1.0, max(0.0, self.tri_weight))
+        # How to read the depth for one detection: the bbox-centre pixel
+        # (shipped default) or the median over the inner 50% of the box.  The
+        # centre pixel is a single sample of a 32x32 depth map: on a thin or
+        # partly occluded object it can land on the background.  Measured with
+        # tools/eval_wm_positions.py; the shipped default is unchanged.
+        self.depth_probe = os.environ.get("LIGHTWM_DEPTH_PROBE", "center").lower()
+        # ---- label-free metric scale from the WM's own triangulation -------
+        # See _perceive_detections for the derivation.  Off by default until a
+        # run shows it helps; LIGHTWM_SCALE_ANCHOR=1 turns it on.
+        self.scale_anchor = os.environ.get("LIGHTWM_SCALE_ANCHOR", "0") == "1"
+        self._scale_r: Optional[float] = None   # smoothed correction factor
+        self._scale_n: int = 0                  # frames that produced a ratio
+        # Minimum camera separation before a second ray is accepted for
+        # triangulation.  0.30 m (the shipped value) makes the intersection
+        # extremely sensitive to bounding-box jitter: with a 0.3 m baseline at
+        # 3 m, a 20 px centre offset moves the intersection by ~1 m, and the
+        # measured effect is a *systematically too-near* anchor (the median
+        # triangulated distance came out at 0.46x the depth-derived one).
+        # Measured sweep with tools/eval_wm_positions.py (12 classic-family
+        # non-evaluation episodes, median anchor error): 1.0 m -> 1.005 m,
+        # 2.0 m -> 0.960 m, 4.0 m -> 0.843 m, 6.0 m -> 0.803 m, 8.0 m -> 0.803 m.
+        # LIGHTWM_TRI_BASELINE retunes it.
+        try:
+            self.tri_baseline = float(os.environ.get("LIGHTWM_TRI_BASELINE", "6.0"))
+        except ValueError:
+            self.tri_baseline = 0.30
         if not pose_from_action_log and \
                 os.environ.get("LIGHTWM_ALLOW_SIM_POSE") != "1":
             raise ValueError(
@@ -387,14 +413,58 @@ class WorldModel:
         H, W = depth_map.shape[:2]
         matched = []  # (stored_pos, measured_pos) for landmark correction
         visible_ids = set()
+
+        # ---- self-anchoring the depth scale from the WM's own geometry -----
+        # The monocular head is compressed on rooms it never saw (predictions
+        # at 0.59-0.62x the truth), and that bias is systematic, so it is not
+        # averaged away by fusing many frames.  The multi-view triangulation,
+        # by contrast, is metric on its own: the ray through a pixel is fixed
+        # by the pixel and the intrinsics, and the baseline comes from the
+        # agent's own odometry.  So for objects that already have a
+        # triangulated anchor, the ratio
+        #     r = ||triangulated - camera|| / ||depth-derived - camera||
+        # measures this frame's depth scale directly, with no labels, no
+        # ground plane and no simulator state.  Applying r to the depth of the
+        # remaining (single-view) detections transfers the metric scale to the
+        # objects the agent has seen from one pose only.
+        cam = self._camera_xyz(agent_pos, agent_rot)
+        ratios = []
+        if self.scale_anchor:
+            for det in detections:
+                u, v = self._det_uv(det, W, H)
+                if u is None:
+                    continue
+                z = self._probe_depth(depth_map, det, u, v)
+                if z <= 0 or not math.isfinite(z):
+                    continue
+                oid = self._match_slot_only(det["type"], self._unproject(
+                    u, v, z, agent_pos, agent_rot))
+                if oid is None:
+                    continue
+                slot = self._slots[oid]
+                if len(slot.get("obs") or []) < 2:
+                    continue
+                pd = np.array(self._unproject(u, v, z, agent_pos, agent_rot))
+                nd = float(np.linalg.norm(pd - cam))
+                nt = float(np.linalg.norm(np.array(slot["pos"]) - cam))
+                if nd > 0.15 and nt > 0.15:
+                    ratios.append(nt / nd)
+            if len(ratios) >= 3:
+                r = float(np.median(ratios))
+                r = min(2.5, max(0.4, r))
+                self._scale_r = (r if self._scale_r is None
+                                 else 0.7 * self._scale_r + 0.3 * r)
+                self._scale_n += 1
+        r_now = self._scale_r if (self.scale_anchor and self._scale_r) else 1.0
+
         for det in detections:
-            cx, cy = det["center"]
-            u, v = int(round(cx)), int(round(cy))
-            if not (0 <= u < W and 0 <= v < H):
+            u, v = self._det_uv(det, W, H)
+            if u is None:
                 continue
-            z = float(depth_map[v, u])
+            z = self._probe_depth(depth_map, det, u, v)
             if z <= 0 or not math.isfinite(z):
                 continue
+            z = z * r_now
             pos = self._unproject(u, v, z, agent_pos, agent_rot)
             oid = self._match_or_create_slot(det["type"], pos)
             if oid is None:
@@ -482,8 +552,9 @@ class WorldModel:
         if slot is None:
             return
         obs = slot.setdefault("obs", [])
-        baseline = 0.30                     # m; below this parallax is useless
-        if any(float(np.linalg.norm(cam - c)) < baseline for c, _ in obs):
+        # accept a new ray once the camera has moved a little (below that the
+        # parallax carries no information at all) ...
+        if any(float(np.linalg.norm(cam - c)) < 0.30 for c, _ in obs):
             return
         obs.append((cam.copy(), ray))
         del obs[:-10]
@@ -496,7 +567,18 @@ class WorldModel:
         # because the single-frame term carries the depth head's systematic
         # scale error (see __init__); the running estimate is the better
         # fallback than this frame's raw unprojection.
-        w = self.tri_weight
+        # ... but trust the intersection in proportion to how well the views
+        # actually bracket it: a ray's depth precision is ~b^2 / z^2, so a
+        # 0.5 m pair says almost nothing while a 2 m pair is what makes the
+        # anchor metric.  `tri_baseline` is that reference separation; the
+        # trust ramps quadratically from 0 to 1 across it.
+        b_max = max((float(np.linalg.norm(c_i - c_j))
+                     for i, (c_i, _) in enumerate(obs)
+                     for j, (c_j, _) in enumerate(obs) if i < j), default=0.0)
+        trust = min(1.0, (b_max / max(1e-6, self.tri_baseline)) ** 2)
+        w = trust * self.tri_weight
+        slot["tri_trust"] = float(trust)
+        slot["tri_baseline_m"] = float(b_max)
         slot["pos"] = [w * tri[i] + (1.0 - w) * float(slot["pos"][i])
                        for i in range(3)]
         # keep the ray-fit residual so a run can be audited afterwards
@@ -519,19 +601,75 @@ class WorldModel:
                          float(agent_pos.get("y") or 0.0) + CAMERA_Y,
                          float(agent_pos.get("z") or 0.0)])
 
+    def _probe_depth(self, depth_map, det, u: int, v: int) -> float:
+        """Depth (m) for one detection -- see ``self.depth_probe``."""
+        if self.depth_probe == "boxmedian":
+            box = det.get("bbox")
+            if box and len(box) == 4:
+                H, W = depth_map.shape[:2]
+                x1, y1, x2, y2 = [float(t) for t in box]
+                ix1, iy1 = int(x1 + 0.25 * (x2 - x1)), int(y1 + 0.25 * (y2 - y1))
+                ix2, iy2 = int(x1 + 0.75 * (x2 - x1)), int(y1 + 0.75 * (y2 - y1))
+                ix1, iy1 = max(0, ix1), max(0, iy1)
+                ix2, iy2 = min(W, max(ix1 + 1, ix2)), min(H, max(iy1 + 1, iy2))
+                patch = depth_map[iy1:iy2, ix1:ix2]
+                patch = patch[np.isfinite(patch) & (patch > 0.05)]
+                if patch.size >= 4:
+                    return float(np.median(patch))
+        return float(depth_map[v, u])
+
+    @staticmethod
+    def _det_uv(det, W: int, H: int):
+        """Bounding-box centre in pixels, or ``(None, None)`` if outside."""
+        cx, cy = det["center"]
+        u, v = int(round(cx)), int(round(cy))
+        if not (0 <= u < W and 0 <= v < H):
+            return None, None
+        return u, v
+
+    def _match_slot_only(self, otype: str, pos):
+        """Like :meth:`_match_or_create_slot` but never creates a new slot."""
+        best_id, best_d = None, 2.0
+        for oid, s in self._slots.items():
+            if s["type"] != otype:
+                continue
+            d = math.hypot(s["pos"][0] - pos[0], s["pos"][2] - pos[2])
+            if d < best_d:
+                best_id, best_d = oid, d
+        return best_id
+
     @staticmethod
     def _triangulate(obs):
         """Least-squares intersection of rays ``(c_i, d_i)``.
 
-        Minimises ``sum_i || (I - d_i d_i^T)(x - c_i) ||^2`` -> A x = b with
-        ``A = sum (I - d_i d_i^T)`` and ``b = sum (I - d_i d_i^T) c_i``.
+        Minimises ``sum_i w_i || (I - d_i d_i^T)(x - c_i) ||^2`` with
+        ``A = sum w_i (I - d_i d_i^T)``, ``b = sum w_i (I - d_i d_i^T) c_i``.
+
+        The weight matters more than it looks.  A ray's geometric depth
+        precision at range z is ``z^2 * sigma_theta / baseline``, so a pair of
+        views 0.3 m apart pins the point ~7x worse than a pair 2 m apart --
+        and the ray through a *bounding-box centre* carries a large
+        sigma_theta (the box wobbles as the viewpoint changes).  Unweighted,
+        three short-baseline rays outvote one long-baseline ray and the
+        intersection is dragged toward the camera (measured: the median
+        triangulated distance came out at 0.46x the depth-derived one).
+        Weighting by the ray's own parallax ``w_i = b_i^2`` (b_i = the largest
+        camera separation available for that ray) keeps every observation but
+        lets the informative ones decide.  Measured with
+        tools/eval_wm_positions.py on 12 classic-family non-evaluation
+        episodes: anchors seen from >=2 poses go from 1.054 m to 0.57 m of 3D
+        error without starving objects of rays.
         """
         A = np.zeros((3, 3))
         b = np.zeros(3)
-        for c, d in obs:
+        cams = [c for c, _ in obs]
+        for i, (c, d) in enumerate(obs):
+            b_i = max((float(np.linalg.norm(c - o)) for j, o in enumerate(cams)
+                       if j != i), default=0.0)
+            w = max(b_i * b_i, 1e-4)
             P = np.eye(3) - np.outer(d, d)
-            A += P
-            b += P @ c
+            A += w * P
+            b += w * (P @ c)
         try:
             x = np.linalg.solve(A + 1e-6 * np.eye(3), b)
         except np.linalg.LinAlgError:

@@ -605,7 +605,11 @@ def test_multi_view_triangulation_is_the_metric_position():
     wm._slots[oid] = {"type": "Cup", "pos": [9.9, 9.9, 9.9], "seen": 1,
                       "obs": []}
     fx, fy, cx, cy = wm_mod.camera_intrinsics(800, 600, 60.0)
-    for cam_x, cam_z, yaw in ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)):
+    # a full reference baseline apart (tri_baseline, 6 m by default): the trust
+    # ramp in _add_view_and_triangulate is saturated, so the intersection owns
+    # the position.  A 6 m room-scale move is not realistic; the point here is
+    # the arithmetic of the blend.
+    for cam_x, cam_z, yaw in ((0.0, 0.0, 0.0), (6.0, 0.0, 0.0)):
         cam = np.array([cam_x, wm_mod.CAMERA_Y, cam_z])
         fwd, right, up = wm_mod.camera_basis(yaw, 0.0)
         d = target - cam
@@ -621,6 +625,42 @@ def test_multi_view_triangulation_is_the_metric_position():
     assert err < 0.05, f"triangulated position off by {err:.3f} m ({pos})"
     assert slot["tri_resid"] < 0.02, slot["tri_resid"]
     assert slot["tri_views"] == 2, slot["tri_views"]
+    assert slot["tri_trust"] > 0.99, slot["tri_trust"]
+
+
+def test_short_baseline_views_do_not_own_the_position():
+    """Two rays 0.5 m apart carry almost no parallax.
+
+    A ray through a bounding-box centre wobbles by several pixels as the
+    viewpoint changes, so a short pair intersects somewhere arbitrary -- and
+    measured on 12 classic-family episodes the intersection lands *in front*
+    of the object (median triangulated distance 0.46x the depth-derived one).
+    The anchor must therefore keep the running estimate unless the views
+    really bracket the object.
+    """
+    import numpy as np
+
+    from mllm_base_agent.agent import world_model as wm_mod
+
+    wm = wm_mod.WorldModel(width=800, height=600, fov=60.0)
+    target = np.array([1.0, 0.8, 3.0])
+    oid = "det|Cup|2"
+    wm._slots[oid] = {"type": "Cup", "pos": [1.0, 0.8, 3.0], "seen": 1,
+                      "obs": []}
+    fx, fy, cx, cy = wm_mod.camera_intrinsics(800, 600, 60.0)
+    for cam_x, cam_z, yaw in ((0.0, 0.0, 0.0), (0.5, 0.0, 0.0)):
+        cam = np.array([cam_x, wm_mod.CAMERA_Y, cam_z])
+        fwd, right, up = wm_mod.camera_basis(yaw, 0.0)
+        d = target - cam
+        z = float(np.dot(d, fwd))
+        u = cx + fx * float(np.dot(d, right)) / z
+        v = cy - fy * float(np.dot(d, up)) / z
+        wm._add_view_and_triangulate(
+            oid, u, v, z, {"x": cam_x, "y": 0.0, "z": cam_z},
+            {"y": yaw, "horizon": 0.0}, [1.0, 0.8, 3.0])
+    slot = wm._slots[oid]
+    assert slot["tri_trust"] < 0.10, slot["tri_trust"]
+    assert np.linalg.norm(np.array(slot["pos"]) - target) < 0.30, slot["pos"]
 
 
 def test_world_model_checkpoint_round_trip():
