@@ -1,0 +1,65 @@
+#!/bin/bash
+# Run the v3 depth-head retrain ON THE CLOUD BOX (weste).
+# Driven from the workstation by tools/run_cloud_depth_v3.py; can also be run
+# by hand after `scp`-ing it over.
+#
+# What v3 fixes versus v2: v2 trained on 27 rooms of which ZERO were classic
+# homes (FloorPlan1-30), while 57.7% of the objects visible in the evaluation
+# rooms belong to that family -- so the head's metric scale collapsed there
+# (predictions at 0.59-0.62x the truth).  v3 adds the classic pool, scene-
+# balances the sampling, and photometrically jitters so the scale cannot be
+# bound to the look of a particular house.
+#
+# Prerequisites on the box:
+#   /root/autodl-tmp/lightwm_data_cov      <- uploaded by the driver (2.5 GB)
+#   /root/autodl-tmp/lightwm_data_cov2
+#   /root/autodl-tmp/lightwm_data_procthor2
+#   /root/autodl-tmp/lightwm_data_valhouses
+#   /root/.cache/huggingface/hub           <- DINOv2 (no route to huggingface.co)
+set -u
+WM=${LIGHTWM_ROOT:-/root/lightwm_phases}
+DATA=/root/autodl-tmp
+PY=${LIGHTWM_PY:-/root/miniconda3/envs/ai2thor/bin/python}
+[ -x "$PY" ] || PY=$(command -v python3)
+
+export LIGHTWM_DATA_ROOT=$DATA/lightwm_data_cov2
+export LIGHTWM_COV_ROOT=$DATA/lightwm_data_cov          # <- the classic homes
+export LIGHTWM_COV2_ROOT=$DATA/lightwm_data_cov2
+export LIGHTWM_PROCTHOR_ROOT=$DATA/lightwm_data_procthor2
+export LIGHTWM_PROCTHOR2_ROOT=$DATA/lightwm_data_procthor2
+export LIGHTWM_VALHOUSE_ROOT=$DATA/lightwm_data_valhouses
+export LIGHTWM_OBJVIEW_ROOT=$DATA/lightwm_data_cov2
+export LIGHTWM_VIRTUALHOME_ROOT=$DATA/lightwm_data_cov2
+export LIGHTWM_SPLITS=$WM/data/splits_noneval.json
+# no route to huggingface.co on the box: the backbone comes from the cache
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+# keep the socket tmpdir off any fuse/network mount so DataLoader workers start
+export TMPDIR=/root/tmp
+mkdir -p "$TMPDIR" "$DATA/depth_v3"
+
+cd "$WM" || { echo "no repo at $WM"; exit 1; }
+echo "== pool sizes =="
+for p in lightwm_data_cov lightwm_data_cov2 lightwm_data_procthor2 lightwm_data_valhouses; do
+  printf '  %-24s episodes=%s\n' "$p" "$(ls "$DATA/$p/episodes" 2>/dev/null | wc -l)"
+done
+
+echo "== rebuilding the frame index (pools changed, the pickle is a cache) =="
+"$PY" shared/data_index.py data/frame_index.pkl || exit 1
+echo "== regenerating the split (train/val never touch the 81 evaluation rooms) =="
+"$PY" tools/make_noneval_split.py || exit 1
+
+echo "== v3 training =="
+setsid nohup "$PY" phase_b/train_depth_v2.py \
+    --epochs 12 --resolution 448 --depth-size 448 \
+    --batch 16 --workers 8 --device cuda --amp \
+    --jitter 0.3 --scene-balanced --epoch-samples 45000 \
+    --splits data/splits_noneval.json \
+    --ckpt checkpoints/small_objects_20260910/dense_depth_best.pt \
+    --out "$DATA/depth_v3" > /root/train_depth_v3.log 2>&1 < /dev/null &
+
+sleep 20
+echo "== first lines of the log (the leak check must say 0) =="
+head -8 /root/train_depth_v3.log
+echo
+echo "log : /root/train_depth_v3.log     weights: $DATA/depth_v3"
