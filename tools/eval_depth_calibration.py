@@ -87,6 +87,12 @@ def main() -> int:
                     choices=("vertical", "horizontal"))
     ap.add_argument("--stride", type=int, default=4)
     ap.add_argument("--rooms", default="test", choices=("test", "train", "all"))
+    ap.add_argument("--depth-source", default="head", choices=("head", "da2"),
+                    help="head = the project's trained depth head; da2 = the "
+                         "public Depth-Anything-V2 Metric-Indoor-Small model "
+                         "(zero-shot, metric, same cost class)")
+    ap.add_argument("--da2-name",
+                    default="depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--json", default="")
     args = ap.parse_args()
@@ -112,11 +118,38 @@ def main() -> int:
     random.Random(args.seed).shuffle(eps)
     eps = [p for p in eps if p.name.split("__")[0].split("_")[0] in keep]
 
-    rt = PerceptionRuntime(args.ckpt, device=device, zoom=False)
-    if args.resolution:
-        rt.resolution = int(args.resolution)
-    print(f"head {args.ckpt} @ {rt.resolution} on {device}; rooms={args.rooms} "
-          f"({len(eps)} episodes)")
+    if args.depth_source == "da2":
+        from transformers import DepthAnythingForDepthEstimation
+        _da2 = DepthAnythingForDepthEstimation.from_pretrained(
+            args.da2_name).to(device).eval()
+        _MEAN = np.array([0.485, 0.456, 0.406], np.float32)
+        _STD = np.array([0.229, 0.224, 0.225], np.float32)
+
+        def _predict(rgb):
+            im = Image.fromarray(rgb).resize((518, 518), Image.BILINEAR)
+            x = ((np.asarray(im, np.float32) / 255.0 - _MEAN) / _STD
+                 ).transpose(2, 0, 1)[None]
+            with torch.no_grad():
+                d = _da2(pixel_values=torch.from_numpy(x).to(device)).predicted_depth
+            d = torch.nn.functional.interpolate(
+                d[:, None].float(), size=rgb.shape[:2], mode="bilinear",
+                align_corners=False)[0, 0]
+            return d.cpu().numpy().astype(np.float32)
+
+        class _DA2:
+            resolution = 518
+
+            def __call__(self, rgb):
+                return {"depth": _predict(rgb), "detections": []}
+        rt = _DA2()
+        print(f"depth source: DA2 {args.da2_name}; rooms={args.rooms} "
+              f"({len(eps)} episodes)")
+    else:
+        rt = PerceptionRuntime(args.ckpt, device=device, zoom=False)
+        if args.resolution:
+            rt.resolution = int(args.resolution)
+        print(f"head {args.ckpt} @ {rt.resolution} on {device}; rooms={args.rooms} "
+              f"({len(eps)} episodes)")
 
     variants = ("none", "oracle_scale", "gt_floor", "gt_floor_lin", "peak",
                 "peak_lin", "band", "band_lin", "pooled")

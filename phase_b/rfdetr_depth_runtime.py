@@ -74,3 +74,108 @@ class RFDETRDepthRuntime:
         v = cls[0].float().cpu().numpy()
         n = float(np.linalg.norm(v))
         return v / n if n > 1e-9 else v
+
+
+class RFDETRDA2Runtime:
+    """Same interface as :class:`RFDETRDepthRuntime`, but the depth comes from
+    the public Depth-Anything-V2 *metric indoor* model instead of our head.
+
+    Measured on 250 held-out evaluation frames with the project's own depth
+    tool (tools/eval_depth_calibration.py), median object error:
+
+        our v2 head   1.070 m      our v3 head   0.989 m
+        DA2-Small     0.444 m
+
+    and with a *known* floor mask, DA2 reaches 0.110 m where our head reaches
+    0.19-0.24 m -- its relative depth is simply better.  It is 99 MB, 24.8 M
+    parameters and ~18 ms/frame at 518 on the local laptop GPU, so this is a
+    drop-in swap rather than a new dependency; the detector is unchanged.
+
+    The model is a public checkpoint trained on Hypersim/NYU-style indoor
+    data.  Nothing about the evaluation rooms is used: no fine-tuning, no
+    calibration, no eval frames enter training.
+    """
+
+    MEAN = np.array([0.485, 0.456, 0.406], np.float32)
+    STD = np.array([0.229, 0.224, 0.225], np.float32)
+
+    def __init__(self, detector_checkpoint, threshold, device="cpu",
+                 da2_name="depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf",
+                 size=518, type_names=None):
+        threshold = float(threshold)
+        if not math.isfinite(threshold) or not 0 <= threshold <= 1:
+            raise ValueError("Expected a finite score threshold in [0,1]")
+        from transformers import DepthAnythingForDepthEstimation
+
+        self.device = torch.device(device)
+        try:
+            self.model = DepthAnythingForDepthEstimation.from_pretrained(
+                da2_name).to(self.device).eval().requires_grad_(False)
+        except Exception as exc:                       # pragma: no cover
+            raise SystemExit(
+                f"DA2 weights unavailable ({exc}). They cache under "
+                f"$HF_HOME/hub/models--depth-anything--...; the box needs "
+                f"either the cache or a reachable hf-mirror.")
+        self.resolution = int(size)
+        self.obj_thr = threshold
+        if type_names is None:
+            # the detector's own fixed 117-class vocabulary; the inventory is
+            # the cheap source (the index fallback would load 250k frames)
+            from phase_b.perception_runtime import _default_types
+            type_names = _default_types()
+        self.type_names = list(type_names)
+        self.type_ids = {label: i for i, label in enumerate(self.type_names)}
+        self.detector = RFDETRDetector(detector_checkpoint, self.type_names,
+                                       device=self.device)
+        self.parameters = (sum(p.numel() for p in self.model.parameters())
+                           + self.detector.parameters)
+
+    @torch.inference_mode()
+    def __call__(self, rgb):
+        raw = self.detector(rgb)
+        h, w = rgb.shape[:2]
+        image = Image.fromarray(rgb).resize((self.resolution, self.resolution),
+                                            Image.BILINEAR)
+        x = (np.asarray(image, np.float32) / 255.0 - self.MEAN) / self.STD
+        x = torch.from_numpy(x.transpose(2, 0, 1))[None].to(self.device)
+        depth = self.model(pixel_values=x).predicted_depth
+        depth = F.interpolate(depth[:, None].float(), size=(h, w),
+                              mode="bilinear", align_corners=False)[0, 0]
+        depth = depth.cpu().numpy()
+        if not np.isfinite(depth).all():
+            raise ValueError("Nonfinite monocular depth output")
+        detections = []
+        for detection in raw["detections"]:
+            if detection["score"] < self.obj_thr:
+                continue
+            a, b, c, d = detection["bbox"]
+            detections.append({**detection,
+                               "class_id": self.type_ids.get(detection["type"], -1),
+                               "center": [(a + c) / 2, (b + d) / 2],
+                               "size": [c - a, d - b]})
+        return {"detections": detections, "depth": depth, "rgb_shape": (h, w),
+                "detection_views": 1, "encoder_forwards": 1,
+                "backend": "rfdetr_da2", "precision": "fp32"}
+
+    @torch.inference_mode()
+    def embed(self, rgb):
+        """Place fingerprint from DA2's encoder.
+
+        Its backbone returns feature maps (no CLS token), so the fingerprint is
+        the global average of the deepest map -- still a pure function of the
+        RGB the agent was shown, which is all loop closure is allowed to use.
+        """
+        image = Image.fromarray(rgb).resize((self.resolution, self.resolution),
+                                            Image.BILINEAR)
+        x = (np.asarray(image, np.float32) / 255.0 - self.MEAN) / self.STD
+        x = torch.from_numpy(x.transpose(2, 0, 1))[None].to(self.device)
+        out = self.model.backbone(pixel_values=x)
+        maps = getattr(out, "feature_maps", None)
+        if not maps:
+            return None
+        fm = maps[-1]
+        # (B, tokens, C) with token 0 = CLS; average the patch tokens
+        v = (fm[0, 1:].mean(dim=0) if fm.dim() == 3
+             else fm.mean(dim=(2, 3))[0]).float().cpu().numpy()
+        n = float(np.linalg.norm(v))
+        return v / n if n > 1e-9 else v

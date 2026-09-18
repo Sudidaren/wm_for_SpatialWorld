@@ -57,6 +57,10 @@ def install(config_builder) -> None:
         world_model['perception_ckpt'] = DEPTH_CKPT      # 新的 small_objects 深度头
         world_model['obj_thr'] = 0.40                    # 与 configs/rfdetr_small.json 一致的验证阈值
         world_model['perception_runtime_root'] = WM_ROOT
+        # 深度来源（消融开关）：LIGHTWM_DEPTH_SOURCE=head|da2。
+        # da2 = 公开的 Depth-Anything-V2 metric-indoor，零训练；
+        # 同一批 250 帧评测房间上实测 0.444 m vs 我们头的 0.989 m。
+        world_model['depth_source'] = os.environ.get('LIGHTWM_DEPTH_SOURCE', 'head')
         # 目标物来源（2026-09-16 决定）：不使用任何对象词表/别名表。
         # 运行时由模型自己在开局自由文本说出任务涉及的物品（target_priority）。
         # 旧的 WM_TARGET_SOURCE / WM_CONFIG_TARGETS 开关已废弃。
