@@ -159,6 +159,17 @@ def main() -> int:
     ap.add_argument("--width", type=int, default=256)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--val-limit", type=int, default=1200)
+    ap.add_argument("--jitter", type=float, default=0.0,
+                    help="colour/brightness/contrast/gamma jitter strength on "
+                         "training frames (0 = off). Use ~0.3 when the head has "
+                         "to transfer to a room family it never trained on.")
+    ap.add_argument("--scene-balanced", action="store_true",
+                    help="sample scenes (not frames) uniformly, so a pool with "
+                         "thousands of frames per house cannot drown a family "
+                         "that only contributes a few hundred.")
+    ap.add_argument("--epoch-samples", type=int, default=0,
+                    help="frames per epoch (0 = one pass over the index); use "
+                         "with --scene-balanced to control epoch length")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--device", default=None)
     ap.add_argument("--amp", action="store_true")
@@ -213,6 +224,21 @@ def main() -> int:
 
     train_ds = PerceptionDataset(index, limit=args.limit, seed=args.seed,
                                  require_depth=True, split_path=args.splits)
+    train_ds.photometric_jitter = args.jitter
+    # Hard gate: the evaluation rooms are the held-out report set and must never
+    # be trained on.  A missing/renamed split file would otherwise make the
+    # dataset silently fall back to "all frames", so verify the selection.
+    eval_path = os.path.join(ROOT, "data", "eval_rooms.json")
+    if os.path.isfile(eval_path):
+        eval_rooms = set(json.load(open(eval_path))["rooms"])
+        offenders = [f for f in train_ds.frames
+                     if any(r in str(f.get("scene")) for r in eval_rooms)]
+        if offenders:
+            raise SystemExit(
+                f"refusing to train: {len(offenders)} frames come from evaluation "
+                f"rooms (first: {offenders[0].get('scene')}). Check --splits.")
+        print(f"leak check: 0/{len(train_ds.frames)} training frames from the "
+              f"{len(eval_rooms)} evaluation rooms", flush=True)
     # validation wants a different scene set: reuse the same split file but the
     # val rooms are filtered in by swapping the split dict
     with open(args.splits) as fh:
@@ -230,6 +256,19 @@ def main() -> int:
     train_loader = DataLoader(train_ds, batch_size=args.batch, shuffle=True,
                               num_workers=args.workers,
                               collate_fn=collate_perception, pin_memory=True)
+    if args.scene_balanced:
+        import collections as _collections
+        counts = _collections.Counter(str(f.get("scene") or "") for f in train_ds.frames)
+        weights = [1.0 / max(1, counts[str(f.get("scene") or "")])
+                   for f in train_ds.frames]
+        n_samples = args.epoch_samples or len(train_ds)
+        sampler = torch.utils.data.WeightedRandomSampler(
+            torch.tensor(weights, dtype=torch.double), n_samples, replacement=True)
+        train_loader = DataLoader(train_ds, batch_size=args.batch, sampler=sampler,
+                                  num_workers=args.workers,
+                                  collate_fn=collate_perception, pin_memory=True)
+        print(f"scene-balanced sampling: {len(counts)} scenes, "
+              f"{n_samples} frames/epoch")
     val_loader = DataLoader(val_ds, batch_size=args.batch, shuffle=False,
                             num_workers=4, collate_fn=collate_perception)
     print(f"train frames {len(train_ds)} | val frames {len(val_ds)}")

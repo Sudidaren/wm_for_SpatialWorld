@@ -27,6 +27,7 @@ import argparse
 import collections
 import json
 import math
+import re
 import statistics
 import sys
 from pathlib import Path
@@ -95,6 +96,9 @@ def main() -> int:
     ap.add_argument("--keep-aspect", action="store_true",
                     help="resize preserving 4:3 instead of square squashing")
     ap.add_argument("--rooms", choices=("all", "train", "test"), default="all")
+    ap.add_argument("--per-family-frames", type=int, default=0,
+                    help="cap frames per AI2-THOR room family, so one family "
+                         "cannot dominate the sample (0 = uncapped)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--json", default="")
     args = ap.parse_args()
@@ -123,6 +127,15 @@ def main() -> int:
     if args.rooms != "all":
         keep = test_rooms if args.rooms == "test" else train_rooms
         eps = [p for p in eps if p.name.split("__")[0].split("_")[0] in keep]
+    fam_done = collections.Counter()
+
+    def fam_of(room: str) -> str:
+        m = re.match(r"FloorPlan(\d+)", str(room))
+        if not m:
+            return "other"
+        n = int(m.group(1))
+        return "classic" if n <= 30 else f"{n // 100}xx"
+
     print(f"episodes used: {len(eps)} (rooms={args.rooms})")
     for ep in eps:
         if frames_done >= args.frames:
@@ -130,6 +143,9 @@ def main() -> int:
         meta = json.loads((ep / "episode.json").read_text())
         scene = str(meta.get("scene", ""))
         room = scene.split("_")[0]
+        if args.per_family_frames and (room in test_rooms or room in train_rooms) \
+                and fam_done[fam_of(room)] >= args.per_family_frames:
+            continue
         seen = "unseen" if room in test_rooms else ("seen" if room in train_rooms else "other")
         for frame in meta.get("frames", []):
             if frames_done >= args.frames:
@@ -171,6 +187,7 @@ def main() -> int:
                 if pred.shape != (h, w):
                     pred = np.asarray(Image.fromarray(pred).resize((w, h), Image.BILINEAR))
             frames_done += 1
+            fam_done[fam_of(room)] += 1
 
             yaw = float((agent.get("rotation") or {}).get("y") or 0.0)
             horizon = float(agent.get("cameraHorizon") or 0.0)

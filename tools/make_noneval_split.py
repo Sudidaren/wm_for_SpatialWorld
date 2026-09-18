@@ -45,7 +45,17 @@ def main() -> int:
             ai.add(canon(s))
     non_eval = sorted(r for r in ai if r not in eval_rooms)
     leaked = sorted(r for r in ai if r in eval_rooms)
-    val_rooms = non_eval[-3:]
+    # Hold out one room per family.  The evaluation draws on several AI2-THOR
+    # families that look nothing alike, so a validation set taken from one
+    # family alone would select a head that is calibrated for that family only.
+    def family(room: str) -> str:
+        n = int(re.match(r"FloorPlan(\d+)", room).group(1))
+        return "classic" if n <= 30 else f"{n // 100}xx"
+
+    by_family: dict = {}
+    for r in non_eval:
+        by_family.setdefault(family(r), []).append(r)
+    val_rooms = sorted(rooms[-1] for rooms in by_family.values() if len(rooms) >= 2)
     train_rooms = [r for r in non_eval if r not in val_rooms]
     pt = sorted(procthor)
     pt_val = pt[-5:]

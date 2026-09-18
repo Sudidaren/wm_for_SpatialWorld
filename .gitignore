@@ -18,6 +18,7 @@ data/frame_index*.bak*
 
 # local scratch
 .venv-rfdetr/
+.venv-depth/
 *.log
 
 # partner's separate module tree: kept out of this repository on purpose

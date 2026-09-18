@@ -41,6 +41,29 @@ def load_depth(path: str, size: int = None) -> np.ndarray:
     return d
 
 
+def photometric_jitter(rgb: np.ndarray, strength: float,
+                       rng=None) -> np.ndarray:
+    """Random colour / brightness / contrast / gamma change on an RGB float
+    image in [0, 1].  Geometry (and therefore the depth target) is untouched.
+
+    The depth head is trained on a handful of room families, but is applied to
+    rooms it has never seen, whose lighting and wall colours differ.  Jittering
+    appearance at training time stops the head from fusing its metric scale to
+    the look of the training pools.
+    """
+    if strength <= 0:
+        return rgb
+    rng = rng if rng is not None else np.random
+    out = rgb.astype(np.float32, copy=True)
+    grey = out.mean(axis=2, keepdims=True)
+    out = grey + (out - grey) * float(1.0 + rng.uniform(-strength, strength))
+    mean = float(out.mean())
+    out = (out - mean) * float(1.0 + rng.uniform(-strength, strength)) + mean
+    out = out * float(1.0 + rng.uniform(-strength / 2.0, strength / 2.0))
+    gamma = float(np.exp(rng.uniform(-strength, strength)))
+    return np.clip(out, 0.0, 1.0) ** gamma
+
+
 def has_image(fr: dict) -> bool:
     return bool(fr.get("rgb")) and not fr["rgb"].endswith("/")
 
@@ -93,6 +116,11 @@ def frame_in_train(fr: dict, split=None) -> bool:
 
 class PerceptionDataset(Dataset):
     """Frame -> (rgb, gt boxes [cx,cy,w,h], object class ids, depth target)."""
+
+    #: appearance jitter strength; 0 keeps the frame untouched.  Trainers that
+    #: want a head robust to a different room family / lighting set this to a
+    #: positive value, since the depth head is the only consumer that changes.
+    photometric_jitter = 0.0
 
     def __init__(self, index=None, limit: int = 0, seed: int = 0,
                  class_balanced: bool = False, copy_paste: bool = False,
@@ -167,6 +195,7 @@ class PerceptionDataset(Dataset):
                 np.random.RandomState(np.random.randint(2 ** 31)))
         rgb = np.asarray(Image.fromarray(rgb_full).resize(
             (IMG_SIZE, IMG_SIZE)), dtype=np.float32) / 255.0
+        rgb = photometric_jitter(rgb, self.photometric_jitter)
         flip = bool(np.random.rand() < 0.5)
         if flip:
             rgb = np.ascontiguousarray(rgb[:, ::-1, :])
