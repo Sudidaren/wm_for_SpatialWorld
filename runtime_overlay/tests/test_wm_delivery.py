@@ -527,13 +527,22 @@ def test_camera_model_round_trips_ground_truth():
     runtime dropped the pitch, ignored the camera height and had the vertical
     sign flipped (measured at a median 1.01 m of 3D error at 30 deg pitch on
     the coverage sweep -- tools/eval_projection_accuracy.py).
+
+    The projection now uses :func:`camera_intrinsics` rather than a copied
+    constant, so the test also guards the 2026-09-18 field-of-view fix: the
+    legacy ``(width/2)/tan(fov/2)`` value is 33 % too long on the vertical axis
+    and made this round trip fail by ~0.2 m at the frame edges.
     """
     import numpy as np
 
     from mllm_base_agent.agent import world_model as wm_mod
 
     wm = wm_mod.WorldModel(width=800, height=600, fov=60.0)
-    fx = (800 / 2.0) / math.tan(math.radians(30.0))
+    assert wm.fov_convention == "vertical", wm.fov_convention
+    fx, fy, cx, cy = wm_mod.camera_intrinsics(800, 600, 60.0)
+    # AI2-THOR reports a VERTICAL fov (Unity semantics): 519.6 at 800x600,
+    # not the legacy 692.8
+    assert abs(fy - (600 / 2.0) / math.tan(math.radians(30.0))) < 1e-9
     worst = 0.0
     for horizon in (0.0, 30.0, -30.0, 60.0):
         cam = np.array([1.0, wm_mod.CAMERA_Y, 2.0])
@@ -543,8 +552,8 @@ def test_camera_model_round_trips_ground_truth():
                        np.array([0.1, 0.2, 4.5])):    # left and low
             d = target - cam
             z = float(np.dot(d, fwd))
-            u = 400.0 + fx * float(np.dot(d, right)) / z
-            v = 300.0 - fx * float(np.dot(d, up)) / z
+            u = cx + fx * float(np.dot(d, right)) / z
+            v = cy - fy * float(np.dot(d, up)) / z
             back = np.array(wm._unproject(
                 u, v, z, {"x": 1.0, "y": 0.0, "z": 2.0},
                 {"y": 0.0, "horizon": horizon}))
@@ -565,6 +574,13 @@ def test_camera_height_and_vertical_sign():
     low = wm._unproject(400.0, 400.0, 2.0,
                         {"x": 0.0, "y": 0.0, "z": 0.0}, {"y": 0.0})
     assert low[1] < wm_mod.CAMERA_Y, low
+    # ... and by exactly this much: 100 px below the centre is 100/519.6 rad,
+    # so 2 m along the optical axis sits 0.385 m below the camera.  The legacy
+    # 692.8 focal length would say 0.289 m -- a 0.10 m error on a single
+    # unprojection, which is the size of the effect the fix removes.
+    expect = wm_mod.CAMERA_Y - 2.0 * (100.0 / ((600 / 2.0) /
+                                               math.tan(math.radians(30.0))))
+    assert abs(low[1] - expect) < 1e-9, (low[1], expect)
 
 
 def test_world_model_checkpoint_round_trip():

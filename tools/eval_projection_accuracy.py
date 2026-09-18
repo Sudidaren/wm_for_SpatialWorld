@@ -40,13 +40,22 @@ from PIL import Image
 
 CAMERA_Y = 0.675                     # AI2-THOR default camera height
 
+#: AI2-THOR reports a VERTICAL field of view (Unity semantics), so with square
+#: pixels ``fx == fy == (H/2)/tan(vfov/2) == 519.6`` at 800x600.  The legacy
+#: value ``(W/2)/tan(vfov/2) == 692.8`` is kept switchable so the two can be
+#: A/B'd on recorded episodes instead of argued about.
+FOV_CONVENTION = "vertical"
+
 
 # --------------------------------------------------------------------------
 # the two camera models
 # --------------------------------------------------------------------------
 def _intrinsics(width, height, fov):
-    fx = (width / 2.0) / math.tan(math.radians(fov) / 2.0)
-    return fx, fx, width / 2.0, height / 2.0
+    if FOV_CONVENTION == "vertical":
+        f = (height / 2.0) / math.tan(math.radians(fov) / 2.0)
+    else:
+        f = (width / 2.0) / math.tan(math.radians(fov) / 2.0)
+    return f, f, width / 2.0, height / 2.0
 
 
 def unproject_old(u, v, z, ax, ay, az, yaw, width, height, fov):
@@ -212,7 +221,13 @@ def main() -> int:
                     help="path to mllm_base_agent/agent/world_model.py; when "
                          "given, the 'new' column uses the actual shipped "
                          "WorldModel._unproject instead of the local copy")
+    ap.add_argument("--fov-convention", choices=("vertical", "horizontal"),
+                    default="vertical",
+                    help="vertical = Unity semantics (correct for AI2-THOR); "
+                         "horizontal = the legacy (W/2)/tan(fov/2) value")
     args = ap.parse_args()
+    global FOV_CONVENTION
+    FOV_CONVENTION = args.fov_convention
 
     runtime_unproject = None
     if args.runtime:
@@ -311,6 +326,10 @@ def main() -> int:
                     err3d_new=float(np.linalg.norm(p_new - gt)),
                     errh_old=float(np.hypot(p_old[0] - gt[0], p_old[2] - gt[2])),
                     errh_new=float(np.hypot(p_new[0] - gt[0], p_new[2] - gt[2])),
+                    # horizontal disagreement between the two camera models
+                    # for the same pixel (the summary below reports it)
+                    delta_xz=float(np.hypot(p_old[0] - p_new[0],
+                                            p_old[2] - p_new[2])),
                     errz_old=float(abs(p_old[1] - gt[1])),
                     errz_new=float(abs(p_new[1] - gt[1])),
                 ))

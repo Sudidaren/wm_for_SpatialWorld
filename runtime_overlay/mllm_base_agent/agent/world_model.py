@@ -94,6 +94,37 @@ def _similarity2d(src, dst):
     return scale, R, t
 
 
+#: AI2-THOR reports its ``fieldOfView`` with Unity semantics, i.e. it is the
+#: VERTICAL fov, so for the 800x600 rig with square pixels
+#: ``fx = fy = (height/2)/tan(fov/2) = 519.6``.  The legacy code used
+#: ``(width/2)/tan(fov/2) = 692.8`` for *both* axes, which stretches every ray
+#: vertically and shrinks the horizontal offsets.
+#:
+#: Measured on 3088 recorded object views with the ground-truth depth (so the
+#: detector and the depth head cannot confound it), median localisation error:
+#:
+#:     legacy 692.8 :  3D 0.356 m   horizontal 0.260 m   vertical 0.191 m
+#:     correct 519.6:  3D 0.189 m   horizontal 0.145 m   vertical 0.040 m
+#:
+#: Reproduce with ``tools/eval_projection_accuracy.py --fov-convention {horizontal,vertical}``.
+FOV_CONVENTION = os.environ.get("LIGHTWM_FOV_CONVENTION", "vertical")
+
+
+def camera_intrinsics(width: int, height: int, fov: float,
+                      convention: Optional[str] = None):
+    """``(fx, fy, cx, cy)`` for the AI2-THOR rig.
+
+    ``convention="vertical"`` (default, correct) treats the reported fov as the
+    vertical one; ``"horizontal"`` reproduces the legacy value for A/B tests.
+    """
+    conv = (convention or FOV_CONVENTION or "vertical").lower()
+    if conv == "horizontal":
+        f = (width / 2.0) / math.tan(math.radians(fov) / 2.0)
+    else:
+        f = (height / 2.0) / math.tan(math.radians(fov) / 2.0)
+    return f, f, width / 2.0, height / 2.0
+
+
 class WorldModel:
     def __init__(
         self,
@@ -101,6 +132,7 @@ class WorldModel:
         fov: float = 60.0,
         width: int = 800,
         height: int = 600,
+        fov_convention: Optional[str] = None,
         hand_from_action_log: bool = True,
         pose_from_action_log: bool = True,
         pose_initial: str = "origin",
@@ -110,6 +142,9 @@ class WorldModel:
         self.fov = fov
         self.width = width
         self.height = height
+        # "vertical" (correct for AI2-THOR) or "horizontal" (legacy A/B)
+        self.fov_convention = (fov_convention or FOV_CONVENTION or
+                               "vertical").lower()
         self.hand_from_action_log = hand_from_action_log
         self.pose_from_action_log = pose_from_action_log
         self.pose_initial = pose_initial
@@ -410,12 +445,12 @@ class WorldModel:
         result is blended with the running EMA rather than replacing it.
         """
         cam = self._camera_xyz(agent_pos, agent_rot)
-        fx = (self.width / 2.0) / math.tan(math.radians(self.fov / 2.0))
-        cx, cy = self.width / 2.0, self.height / 2.0
+        fx, fy, cx, cy = camera_intrinsics(self.width, self.height, self.fov,
+                                           self.fov_convention)
         fwd, right, up = camera_basis(float(agent_rot.get("y", 0.0)),
                                       float(agent_rot.get("horizon", 0.0) or 0.0))
         x_rel = (u - cx) * z / fx
-        y_rel = (cy - v) * z / fx
+        y_rel = (cy - v) * z / fy
         ray = right * x_rel + up * y_rel + fwd * z
         n = float(np.linalg.norm(ray))
         if n <= 1e-9:
@@ -614,9 +649,8 @@ class WorldModel:
         ``tools/eval_projection_accuracy.py`` measures this against recorded
         ground truth.
         """
-        fx = (self.width / 2.0) / math.tan(math.radians(self.fov / 2.0))
-        fy = fx
-        cx, cy = self.width / 2.0, self.height / 2.0
+        fx, fy, cx, cy = camera_intrinsics(self.width, self.height, self.fov,
+                                           self.fov_convention)
         x_rel = (u - cx) * z / fx
         y_rel = (cy - v) * z / fy
         fwd, right, up = camera_basis(float(agent_rot.get("y", 0.0)),
@@ -803,6 +837,7 @@ class WorldModel:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         data = {
             "fov": self.fov,
+            "fov_convention": self.fov_convention,
             "width": self.width,
             "height": self.height,
             "hand_from_action_log": self.hand_from_action_log,
