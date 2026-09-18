@@ -99,12 +99,30 @@ def main() -> int:
     ap.add_argument("--per-family-frames", type=int, default=0,
                     help="cap frames per AI2-THOR room family, so one family "
                          "cannot dominate the sample (0 = uncapped)")
+    ap.add_argument("--calib", choices=("none", "ground", "oracle"), default="none",
+                    help="post-hoc metric-scale calibration of the depth map. "
+                         "'ground' = floor-plane self-anchoring (no labels, no "
+                         "simulator state, legal at test time); 'oracle' = the "
+                         "per-frame scale fitted from GT depth, i.e. the ceiling "
+                         "any global-scale correction could reach (debug only).")
+    ap.add_argument("--calib-fov", type=float, default=60.0)
+    ap.add_argument("--calib-convention", choices=("vertical", "horizontal"),
+                    default="vertical",
+                    help="AI2-THOR reports a VERTICAL fov (measured against "
+                         "known object positions); 'horizontal' is the legacy "
+                         "convention kept for A/B tests")
+    ap.add_argument("--calib-stride", type=int, default=4)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--json", default="")
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     from phase_b.perception_runtime import PerceptionRuntime
+    from phase_b.depth_calib import (GroundCalibConfig, apply_scale_curve,
+                                     fit_scale_curve)
+    calib_cfg = GroundCalibConfig(fov=args.calib_fov,
+                                  convention=args.calib_convention,
+                                  stride=args.calib_stride)
     rt = PerceptionRuntime(args.ckpt, device=device, zoom=False)
     native = rt.resolution
     if args.resolution:
@@ -140,7 +158,14 @@ def main() -> int:
     for ep in eps:
         if frames_done >= args.frames:
             break
-        meta = json.loads((ep / "episode.json").read_text())
+        try:
+            meta = json.loads((ep / "episode.json").read_text())
+        except (OSError, ValueError):
+            # /mnt/d is a Windows drive: dirents can go stale between the
+            # listing and the read, and one unreadable episode must not kill
+            # a half-hour sweep.
+            skip["bad_episode"] += 1
+            continue
         scene = str(meta.get("scene", ""))
         room = scene.split("_")[0]
         if args.per_family_frames and (room in test_rooms or room in train_rooms) \
@@ -191,6 +216,24 @@ def main() -> int:
 
             yaw = float((agent.get("rotation") or {}).get("y") or 0.0)
             horizon = float(agent.get("cameraHorizon") or 0.0)
+
+            # ---- metric-scale calibration of this frame's depth map ----
+            k_scale, k_info = 1.0, {}
+            if args.calib == "ground":
+                curves, k_info = fit_scale_curve(pred, horizon, width=w,
+                                                 height=h, cfg=calib_cfg)
+                if curves is None:
+                    k_scale, k_info = 1.0, {**k_info, "fallback": True}
+                else:
+                    k_scale = float(k_info.get("k_equiv", 1.0))
+                    pred = apply_scale_curve(pred, curves)
+            elif args.calib == "oracle":
+                m = np.isfinite(pred) & np.isfinite(gtd) & (gtd > 0.3) & (gtd < 8)
+                k_scale = float(np.median(pred[m] / gtd[m])) if np.any(m) else 1.0
+                k_info = {"oracle": True}
+            if args.calib != "ground" and k_scale != 1.0:
+                pred = pred / k_scale
+
             fwd, right, up = camera_basis(yaw, horizon)
             cam = np.array([pos["x"], (pos.get("y") or 0.0) + CAMERA_Y, pos["z"]])
             fx = (w / 2.0) / math.tan(math.radians(60.0) / 2.0)
@@ -219,6 +262,12 @@ def main() -> int:
                 vi = int(round(cy - fx * float(np.dot(d, up)) / z_axis))
                 rows.append(dict(
                     seen=seen, scene=scene, name=str(obj.get("objectId", "")).split("|")[0],
+                    frame=f"{ep.name}#{frames_done}", k=float(k_scale),
+                    calib_fallback=bool(k_info.get("fallback")
+                                        or k_info.get("reason")),
+                    **{key: float(k_info[key]) for key in
+                       ("a", "b", "resid", "n_floor", "peak")
+                       if key in k_info},
                     gt_pixel=float(np.median(gvals)),            # depth at the sampled pixels
                     pred_pixel=float(np.median(pvals)),
                     gt_center_png=(float(gtd[vi, ui])
@@ -241,6 +290,24 @@ def main() -> int:
     print(f"\nframes {frames_done}   objects {len(rows)}   skipped {dict(skip)}")
     print(f"single-pixel style metric: median|err| {statistics.median(err):.3f} m, "
           f"median bias {statistics.median(bias):+.3f} m, median ratio {statistics.median(ratio):.3f}")
+
+    if args.calib != "none":
+        ks = sorted(r["k"] for r in rows)
+        n_frames = len({r["frame"] for r in rows})
+        fallbacks = len({r["frame"] for r in rows if r.get("calib_fallback")})
+        print(f"\n[标定] calib={args.calib} fov={args.calib_fov} "
+              f"convention={args.calib_convention}")
+        print(f"  每帧等效尺度 k (pred = k * true): 中位 {statistics.median(ks):.3f}  "
+              f"p10 {ks[int(0.1 * len(ks))]:.3f}  p90 {ks[int(0.9 * len(ks))]:.3f}  "
+              f"|  退化回退的帧 {fallbacks}/{n_frames}")
+        if args.calib == "ground":
+            conv = [r for r in rows if "a" in r]
+            if conv:
+                aa = statistics.median(r["a"] for r in conv)
+                res = statistics.median(r.get("resid", float("nan")) for r in conv)
+                nfl = statistics.median(r.get("n_floor", 0) for r in conv)
+                print(f"  校正曲线 true = pred^a * exp(b): 中位 a {aa:.3f}, "
+                      f"log 残差 {res:.3f}, 地面像素中位 {nfl:.0f}")
 
     # ---- error floor: how much GT depth varies inside one object ----
     print("\n[误差下限] 物体自身 mask 内的 GT 深度离散度（对物体用像素级真值也吃不到这个）:")

@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 
@@ -231,8 +232,16 @@ def main() -> int:
     eval_path = os.path.join(ROOT, "data", "eval_rooms.json")
     if os.path.isfile(eval_path):
         eval_rooms = set(json.load(open(eval_path))["rooms"])
-        offenders = [f for f in train_ds.frames
-                     if any(r in str(f.get("scene")) for r in eval_rooms)]
+        # Match the room id exactly.  A substring test is wrong here: the
+        # evaluation set contains "FloorPlan20" and "FloorPlan21", which are
+        # prefixes of the *training* rooms FloorPlan204/FloorPlan210-219, so
+        # `r in scene` flagged 8832 innocent frames and the run refused to
+        # start.
+        def room_of(frame) -> str:
+            return re.sub(r"_physics$", "",
+                          str(frame.get("scene") or "").split("_")[0])
+
+        offenders = [f for f in train_ds.frames if room_of(f) in eval_rooms]
         if offenders:
             raise SystemExit(
                 f"refusing to train: {len(offenders)} frames come from evaluation "
