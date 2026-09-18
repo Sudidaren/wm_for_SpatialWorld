@@ -111,6 +111,10 @@ def main() -> int:
                     choices=("center", "boxmedian"),
                     help="depth probe for the anchor: the bbox centre pixel "
                          "(shipped) or the median over the inner box")
+    ap.add_argument("--depth-source", default="head",
+                    choices=("head", "da2"),
+                    help="head = the project's trained depth head; da2 = the "
+                         "public Depth-Anything-V2 metric indoor model")
     ap.add_argument("--max-frames", type=int, default=60)
     ap.add_argument("--pose", default="deadreckon",
                     choices=("deadreckon", "recorded"),
@@ -119,12 +123,22 @@ def main() -> int:
                          "verdicts); recorded = inject the recorded agent pose "
                          "each frame, which removes odometry drift so the "
                          "number isolates perception+geometry")
+    ap.add_argument("--metric", default="both",
+                    choices=("position", "surface", "both"),
+                    help="position = 3D distance to the object's centre of "
+                         "mass (what AI2-THOR encodes in the id); surface = "
+                         "distance from the camera versus the ground-truth "
+                         "depth at the object's bbox centre.  The centre of "
+                         "mass sits *behind* the visible surface, so a head "
+                         "that compresses depth can look better on 'position' "
+                         "by accident -- always read the two together.")
     ap.add_argument("--json", default="")
     args = ap.parse_args()
 
     os.environ["LIGHTWM_FOV_CONVENTION"] = args.fov_convention
     os.environ["LIGHTWM_TRI_WEIGHT"] = str(args.tri_weight)
     os.environ["LIGHTWM_DEPTH_PROBE"] = args.sampling
+    os.environ["LIGHTWM_DEPTH_SOURCE"] = args.depth_source
     sys.path.insert(0, "/home/sudidaren/SpatialWorld")
 
     import phase_b.runtime_factory as rf
@@ -171,6 +185,8 @@ def main() -> int:
         wm.attach_perception(runtime)
         prev_rgb = None
         n_frame = 0
+        #: step -> (frame index, camera xyz, {object type: pixel})
+        seen_frames = {}
         for fr in meta.get("frames", [])[:args.max_frames]:
             try:
                 rgb = np.asarray(Image.open(d / fr["rgb"]).convert("RGB"))
@@ -199,6 +215,19 @@ def main() -> int:
                 continue
             prev_rgb = rgb
             n_frame += 1
+            ag = fr.get("agent") or {}
+            pos = ag.get("position") or {}
+            cam = (np.array([float(pos.get("x") or 0.0),
+                             float(pos.get("y") or 0.0) + 0.675,
+                             float(pos.get("z") or 0.0)])
+                   if pos.get("x") is not None else None)
+            px = {}
+            for obj in fr.get("visible_objects") or []:
+                box = obj.get("bbox") or []
+                if len(box) == 4:
+                    px[str(obj.get("objectId")).split("|")[0]] = (
+                        int((box[0] + box[2]) / 2), int((box[1] + box[3]) / 2))
+            seen_frames[n_frame] = (fr, cam, px)
 
         # score the final anchors against the true object positions
         # one entry per *object* (not per frame): the type must also be unique
@@ -230,10 +259,32 @@ def main() -> int:
                 continue
             used.add(best[1])
             pos = np.array(slot["pos"])
+            # surface metric: the anchor's range versus the ground-truth depth
+            # at the object's bbox centre, in the frame the anchor last saw it
+            err_surface = float("nan")
+            if args.metric != "position":
+                step = int(slot.get("last_seen") or 0)
+                rec = seen_frames.get(step)
+                if rec and rec[1] is not None and best[2] is not None:
+                    fr2, cam2, px2 = rec
+                    uv = px2.get(slot["type"])
+                    if uv is not None:
+                        try:
+                            gt2 = np.asarray(Image.open(d / fr2["depth"])).astype(np.float64)
+                            if gt2.ndim == 3:
+                                gt2 = gt2[..., 0]
+                            gt2 = gt2 / 1000.0
+                            x, y = uv
+                            if 0 <= x < gt2.shape[1] and 0 <= y < gt2.shape[0]:
+                                err_surface = abs(
+                                    float(np.linalg.norm(pos - cam2)) - float(gt2[y, x]))
+                        except Exception:
+                            pass
             rows.append(dict(
                 episode=d.name, type=slot["type"], seen=slot.get("seen", 0),
                 n_views=len(slot.get("obs") or []),
                 tri_resid=slot.get("tri_resid", float("nan")),
+                err_surface=err_surface,
                 err3d=float(np.linalg.norm(pos - best[2])),
                 errh=float(math.hypot(pos[0] - best[2][0], pos[2] - best[2][2])),
                 errz=float(abs(pos[1] - best[2][1])),
@@ -251,6 +302,12 @@ def main() -> int:
     print(f"\nanchors scored: {len(rows)}   "
           f"median 3D {med('err3d'):.3f} m   horizontal {med('errh'):.3f} m   "
           f"vertical {med('errz'):.3f} m")
+    surf = [r for r in rows if np.isfinite(r.get("err_surface", float("nan")))]
+    if surf:
+        # the apples-to-apples "how far away is that surface" number, which is
+        # what a depth head should be judged on
+        print(f"surface metric (range vs GT depth at the bbox centre): "
+              f"n={len(surf)}  median {med('err_surface', surf):.3f} m")
     multi = [r for r in rows if r["n_views"] >= 2]
     single = [r for r in rows if r["n_views"] < 2]
     for tag, rs in ((">=2 views (triangulated)", multi), ("1 view", single)):

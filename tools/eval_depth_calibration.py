@@ -30,6 +30,7 @@ import argparse
 import collections
 import json
 import math
+import os
 import random
 import sys
 from pathlib import Path
@@ -91,6 +92,27 @@ def main() -> int:
                     help="head = the project's trained depth head; da2 = the "
                          "public Depth-Anything-V2 Metric-Indoor-Small model "
                          "(zero-shot, metric, same cost class)")
+    ap.add_argument("--gate", type=float, default=0.0,
+                    help="prominence the floor bump must reach before the "
+                         "anchored curve is applied at all; 0 = always apply "
+                         "(the ungated detector measurably HURTS), a large "
+                         "value = only touch the frames where the floor is "
+                         "unmistakable")
+    ap.add_argument("--pool-episode", action="store_true",
+                    help="estimate the metric scale per *episode* (median of "
+                         "the per-frame floor estimates) instead of per frame. "
+                         "The scene's scale is constant while the per-frame "
+                         "estimate is noisy: measured 20%% error per frame vs "
+                         "6.5%% pooled over ~8 frames, which is the difference "
+                         "between 'the anchor hurts' and 'the anchor helps'.")
+    ap.add_argument("--min-pool-frames", type=int, default=4)
+    ap.add_argument("--scale-const", type=float, default=1.3816,
+                    help="DA2's systematic metric bias, calibrated on the "
+                         "*non-evaluation* rooms only: pooled pred/gt = 1.3816 "
+                         "over n=1251 objects (IQR 1.294-1.482).  It is a "
+                         "property of the public model, and on the held-out "
+                         "rooms the same ratio measures 1.32-1.43, so one "
+                         "constant transfers.  Set --scale-const 0 to disable.")
     ap.add_argument("--da2-name",
                     default="depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf")
     ap.add_argument("--seed", type=int, default=0)
@@ -152,7 +174,8 @@ def main() -> int:
               f"({len(eps)} episodes)")
 
     variants = ("none", "oracle_scale", "gt_floor", "gt_floor_lin", "peak",
-                "peak_lin", "band", "band_lin", "pooled")
+                "peak_lin", "centroid_scale", "band", "band_lin", "pooled",
+                "gated", "epi_scale", "const_scale")
     errs = collections.defaultdict(list)
     frame_rows = []
     hist = collections.defaultdict(list)
@@ -165,6 +188,69 @@ def main() -> int:
         except (OSError, ValueError):
             continue
         pool_k: list = []
+        episode_k = None
+        if args.pool_episode:
+            # pre-pass: the scene's metric scale is constant, so the median of
+            # the per-frame floor estimates is far better than any single one
+            # (measured 6.5 % error vs 20 % per frame).  Costs one extra model
+            # forward per frame and nothing else.
+            ks = []
+            for fr2 in meta.get("frames", [])[:64]:
+                ag2 = fr2.get("agent") or {}
+                if (ag2.get("position") or {}).get("x") is None:
+                    continue
+                try:
+                    rgb2 = np.asarray(Image.open(ep / fr2["rgb"]).convert("RGB"))
+                except Exception:
+                    continue
+                p2 = np.asarray(rt(rgb2)["depth"], dtype=np.float64)
+                c2 = vertical_factor(float(ag2.get("cameraHorizon") or 0.0),
+                                     width=rgb2.shape[1], height=rgb2.shape[0],
+                                     cfg=cfg)[:, None]
+                a2 = p2 * c2
+                v2 = np.isfinite(a2) & (a2 > 0.1) & (a2 < 1.6)
+                if v2.sum() < 500:
+                    continue
+                av2 = a2[v2]
+                h2, e2 = np.histogram(av2, bins=np.arange(0.05, 1.6, 0.01))
+                s2 = np.convolve(h2, np.ones(5) / 5, "same")
+                ctr = 0.5 * (e2[:-1] + e2[1:])
+                b2 = float(np.median(s2))
+                ex2 = np.maximum(s2 - b2, 0.0)
+                if ex2.sum() <= 0:
+                    continue
+                cnd = np.nonzero(s2 >= 0.30 * s2.max())[0]
+                if not len(cnd):
+                    continue
+                pk2 = float(ctr[cnd[-1]])
+                prom2 = float(s2.max() / max(b2, 1e-9))
+                win2 = (ctr >= pk2 - 0.30) & (ctr <= pk2 + 0.05)
+                ew2 = np.where(win2, ex2, 0.0)
+                if ew2.sum() <= 0:
+                    continue
+                k2 = float((ctr * ew2).sum() / ew2.sum()) / H
+                # Two gates matter, and the second one is not optional: on
+                # frames whose view is dominated by furniture the estimator
+                # locks onto a low plane (measured k = 0.20 on a focus
+                # episode, i.e. a 5x depth blow-up).  Requiring a clear bump
+                # and a physically plausible factor removes exactly those
+                # frames.  The range is a statement about how wrong a depth
+                # head can plausibly be, not about any particular room.
+                if prom2 < max(args.gate, 1.5) or not (0.5 < k2 < 2.5):
+                    continue
+                ks.append(k2)
+            if len(ks) >= args.min_pool_frames:
+                # A pooled estimate is only worth using when the frames agree:
+                # the scene's scale is constant, so a scattered set of
+                # per-frame estimates means the detector is guessing on some
+                # of them.  Requiring a tight inter-quartile spread removes
+                # those episodes instead of averaging a wrong level in.
+                med_k = float(np.median(ks))
+                lo, hi = np.percentile(ks, [25, 75])
+                if (hi - lo) / max(med_k, 1e-9) <= 0.25:
+                    episode_k = med_k
+            if os.environ.get("LIGHTWM_DEBUG_POOL"):
+                print(f"[pool] {ep.name[:40]:40s} n={len(ks):3d} k={episode_k}", flush=True)
         for fr in meta.get("frames", []):
             if n_frames >= args.frames:
                 break
@@ -218,6 +304,12 @@ def main() -> int:
                 hist_, edges = np.histogram(av, bins=np.arange(0.05, 1.25, 0.01))
                 hs = np.convolve(hist_, np.ones(5) / 5, "same")
                 cen = 0.5 * (edges[:-1] + edges[1:])
+                # how far does the bump stand above the flat background?  The
+                # floor covers only ~3 % of an evaluation frame, so its peak is
+                # a shoulder on a flat distribution: a weak prominence means
+                # the detector is guessing and the correction must be skipped.
+                back = float(np.median(hs))
+                prom = (float(hs.max()) / max(back, 1e-9)) if back > 0 else 0.0
                 cands = np.nonzero(hs >= 0.30 * hs.max())[0]
                 if len(cands):
                     pk = float(cen[cands[-1]])
@@ -230,6 +322,36 @@ def main() -> int:
                         fit = logfit(pf, gf)
                         if fit:
                             cand["peak_lin"] = fit
+                        # Confident-only variant.  The *level* comes from the
+                        # excess-mass centroid rather than the top of the bump:
+                        # the bump's upper edge is noise-biased (measured 23.6 %
+                        # median scale error vs the centroid's 19.8 %, and
+                        # 10.0 % versus 13.4 % on the frames where the floor is
+                        # unmistakable), and a wrong level mislabels the whole
+                        # band.  The correction is applied only when the bump
+                        # stands clear of the flat background.
+                        back = float(np.median(hs))
+                        exc = np.maximum(hs - back, 0.0)
+                        if exc.sum() > 0:
+                            # keep the centroid local to the floor's own bump:
+                            # the global excess mass includes tables and beds,
+                            # which pull it below the floor
+                            win = (cen >= pk - 0.30) & (cen <= pk + 0.05)
+                            e_w = np.where(win, exc, 0.0)
+                            cent = (float((cen * e_w).sum() / e_w.sum())
+                                    if e_w.sum() > 0 else pk)
+                            cand["centroid_scale"] = {
+                                "a": 1.0, "b": -math.log(max(cent / H, 0.05))}
+                        if exc.sum() > 0 and prom >= args.gate and args.gate > 0:
+                            win = (cen >= pk - 0.30) & (cen <= pk + 0.05)
+                            e_w = np.where(win, exc, 0.0)
+                            cent = (float((cen * e_w).sum() / e_w.sum())
+                                    if e_w.sum() > 0 else pk)
+                            band_c = val & (np.abs(a_pred - cent) < 0.10)
+                            if band_c.sum() > 300:
+                                fit_c = logfit(pred[band_c], z_floor[band_c])
+                                if fit_c:
+                                    cand["gated"] = fit_c
                         peak_ok = True
                         pool_k.append(k)
             # bottom band: the floor is directly under the camera
@@ -248,6 +370,14 @@ def main() -> int:
             if len(pool_k) >= 3:
                 k = float(np.median(pool_k))
                 cand["pooled"] = {"a": 1.0, "b": -math.log(k)}
+            if args.scale_const and args.scale_const > 0:
+                # one constant for the public model's metric bias, calibrated
+                # on non-evaluation rooms; no evaluation data is involved
+                cand["const_scale"] = {"a": 1.0,
+                                       "b": -math.log(args.scale_const)}
+            if episode_k:
+                # this episode's pooled scale, applied to every frame of it
+                cand["epi_scale"] = {"a": 1.0, "b": -math.log(episode_k)}
 
             # ---------- score ----------
             for obj in fr.get("visible_objects") or []:

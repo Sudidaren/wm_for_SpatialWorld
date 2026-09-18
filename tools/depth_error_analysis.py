@@ -99,19 +99,29 @@ def main() -> int:
     ap.add_argument("--per-family-frames", type=int, default=0,
                     help="cap frames per AI2-THOR room family, so one family "
                          "cannot dominate the sample (0 = uncapped)")
-    ap.add_argument("--calib", choices=("none", "ground", "oracle"), default="none",
+    ap.add_argument("--calib", choices=("none", "ground", "oracle", "const"), default="none",
                     help="post-hoc metric-scale calibration of the depth map. "
                          "'ground' = floor-plane self-anchoring (no labels, no "
                          "simulator state, legal at test time); 'oracle' = the "
                          "per-frame scale fitted from GT depth, i.e. the ceiling "
                          "any global-scale correction could reach (debug only).")
     ap.add_argument("--calib-fov", type=float, default=60.0)
+    ap.add_argument("--depth-source", default="head", choices=("head", "da2"),
+                    help="head = the project's trained depth head; da2 = the "
+                         "public Depth-Anything-V2 metric indoor model")
     ap.add_argument("--calib-convention", choices=("vertical", "horizontal"),
                     default="vertical",
                     help="AI2-THOR reports a VERTICAL fov (measured against "
                          "known object positions); 'horizontal' is the legacy "
                          "convention kept for A/B tests")
     ap.add_argument("--calib-stride", type=int, default=4)
+    ap.add_argument("--scale-const", type=float, default=1.3816,
+                    help="divide the predicted depth by this constant.  It is "
+                         "the public DA2 model's metric bias, measured on the "
+                         "*non-evaluation* rooms (pooled pred/gt 1.3816 over "
+                         "1251 objects); the same ratio holds on the "
+                         "held-out rooms (1.32-1.43), so one constant "
+                         "transfers.  Only meaningful with --calib const.")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--json", default="")
     args = ap.parse_args()
@@ -123,7 +133,31 @@ def main() -> int:
     calib_cfg = GroundCalibConfig(fov=args.calib_fov,
                                   convention=args.calib_convention,
                                   stride=args.calib_stride)
-    rt = PerceptionRuntime(args.ckpt, device=device, zoom=False)
+    if args.depth_source == "da2":
+        from transformers import DepthAnythingForDepthEstimation
+        _da2 = DepthAnythingForDepthEstimation.from_pretrained(
+            str(ROOT / "checkpoints/da2_metric_indoor_small")).to(device).eval()
+        _M = np.array([0.485, 0.456, 0.406], np.float32)
+        _S = np.array([0.229, 0.224, 0.225], np.float32)
+
+        class _RT:
+            resolution = 518
+
+            @staticmethod
+            def __call__(rgb):
+                h, w = rgb.shape[:2]
+                im = Image.fromarray(rgb).resize((518, 518), Image.BILINEAR)
+                x = ((np.asarray(im, np.float32) / 255.0 - _M) / _S
+                     ).transpose(2, 0, 1)[None]
+                with torch.no_grad():
+                    d = _da2(pixel_values=torch.from_numpy(x).to(device)).predicted_depth
+                d = torch.nn.functional.interpolate(
+                    d[:, None].float(), size=(h, w), mode="bilinear",
+                    align_corners=False)[0, 0]
+                return {"depth": d.cpu().numpy().astype(np.float32)}
+        rt = _RT()
+    else:
+        rt = PerceptionRuntime(args.ckpt, device=device, zoom=False)
     native = rt.resolution
     if args.resolution:
         rt.resolution = int(args.resolution)
@@ -227,6 +261,10 @@ def main() -> int:
                 else:
                     k_scale = float(k_info.get("k_equiv", 1.0))
                     pred = apply_scale_curve(pred, curves)
+            elif args.calib == "const":
+                # the division itself happens below, once
+                k_scale = float(args.scale_const)
+                k_info = {"constant": k_scale}
             elif args.calib == "oracle":
                 m = np.isfinite(pred) & np.isfinite(gtd) & (gtd > 0.3) & (gtd < 8)
                 k_scale = float(np.median(pred[m] / gtd[m])) if np.any(m) else 1.0

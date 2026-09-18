@@ -70,13 +70,39 @@ def main() -> int:
                     help="episodes are walked until this many frames per "
                          "family have been scored")
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--depth-source", default="head", choices=("head", "da2"))
     ap.add_argument("--json", default="")
     args = ap.parse_args()
 
-    from phase_b.perception_runtime import PerceptionRuntime
-    rt = PerceptionRuntime(args.ckpt, device=args.device, zoom=False)
-    if args.resolution:
-        rt.resolution = args.resolution
+    if args.depth_source == "da2":
+        from transformers import DepthAnythingForDepthEstimation
+        import torch
+
+        _m = DepthAnythingForDepthEstimation.from_pretrained(
+            str(ROOT / "checkpoints/da2_metric_indoor_small")).to(args.device).eval()
+        _MEAN = np.array([0.485, 0.456, 0.406], np.float32)
+        _STD = np.array([0.229, 0.224, 0.225], np.float32)
+
+        class _RT:
+            resolution = 518
+
+            @staticmethod
+            def __call__(rgb):
+                im = Image.fromarray(rgb).resize((518, 518), Image.BILINEAR)
+                x = ((np.asarray(im, np.float32) / 255.0 - _MEAN) / _STD
+                     ).transpose(2, 0, 1)[None]
+                with torch.no_grad():
+                    d = _m(pixel_values=torch.from_numpy(x).to(args.device)).predicted_depth
+                d = torch.nn.functional.interpolate(
+                    d[:, None].float(), size=rgb.shape[:2], mode="bilinear",
+                    align_corners=False)[0, 0]
+                return {"depth": d.cpu().numpy().astype(np.float32)}
+        rt = _RT()
+    else:
+        from phase_b.perception_runtime import PerceptionRuntime
+        rt = PerceptionRuntime(args.ckpt, device=args.device, zoom=False)
+        if args.resolution:
+            rt.resolution = args.resolution
 
     ev = set(json.loads((ROOT / "data/eval_rooms.json").read_text())["rooms"])
     sp = json.loads((ROOT / "data/splits_noneval.json").read_text())
