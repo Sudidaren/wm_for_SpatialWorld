@@ -24,6 +24,20 @@ Headline (400-frame sweep, 5004 objects):
 | v2 448 | 0.739 m | -0.738 m | 0.619 | 0.838 |
 | v2 448, after one global log-linear calibration | 0.253 m | -0.049 m | 0.975 | — |
 
+Family-stratified sweep, v2 head (300 frames per family, 10,048 objects):
+
+| family | objects | median \|err\| | median pred/gt |
+|---|---|---|---|
+| FloorPlan1-30 | 4576 | 0.737 m | 0.618 |
+| FloorPlan2xx | 2525 | 1.330 m | 0.515 |
+| FloorPlan3xx | 1507 | 0.556 m | 0.611 |
+| FloorPlan4xx | 1440 | 0.673 m | 0.619 |
+| all | 10048 | 0.807 m | 0.589 |
+
+Every family is compressed, not just the one missing from training: the head
+ties its metric scale to the appearance of the rooms it saw, so it shrinks on
+unseen rooms of any family.
+
 Reading: the v2 head is not mis-shaped, it is *mis-scaled* on this domain
 (fitted `log(gt) = 0.964 * log(pred) + 0.463`, i.e. a 0.62x constant factor).
 It was trained without a single classic-home room, and classic homes carry

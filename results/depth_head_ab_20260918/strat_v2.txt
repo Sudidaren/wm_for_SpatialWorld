@@ -1,0 +1,48 @@
+[perception_runtime] loaded checkpoints/depth_v2_20260918/dense_depth_v2_best.pt on cpu (288 tensors)
+depth head checkpoints/depth_v2_20260918/dense_depth_v2_best.pt
+native 224 -> using 448, keep_aspect=False, device=cpu
+episodes used: 230 (rooms=test)
+
+frames 1300   objects 10048   skipped {'no_pose': 41}
+single-pixel style metric: median|err| 0.807 m, median bias -0.806 m, median ratio 0.589
+
+[误差下限] 物体自身 mask 内的 GT 深度离散度（对物体用像素级真值也吃不到这个）:
+  <1k px     n= 2729   中位 p90-p10 = 0.073 m
+  1k-5k px   n= 2622   中位 p90-p10 = 0.163 m
+  5k-20k px  n= 2652   中位 p90-p10 = 0.238 m
+  >20k px    n= 2045   中位 p90-p10 = 0.298 m
+
+[偏差 vs 随机] 按真值距离分桶:
+  bucket         n median|err|     bias   ratio        去掉中位偏差后|err|
+  <0.5m        271       0.332   +0.332   1.935               0.149
+  0.5-1m       619       0.234   -0.206   0.747               0.117
+  1-2m        4277       0.554   -0.554   0.631               0.182
+  2-3m        2935       1.043   -1.043   0.566               0.203
+  >3m         1946       1.695   -1.695   0.517               0.373
+
+[采样口径] n=4396
+  mask 中位深度  vs 框中心像素深度: 中位差 0.260 m
+  几何真值(物体中心沿光轴) vs mask 中位深度: 中位差 0.060 m
+  用几何真值当答案时，头部误差: 中位 0.992 m (bias -0.992)
+
+[房间] 训练见过的房间 vs 留出房间:
+  unseen   n=10048  中位|err| 0.807 m  bias -0.806  ratio 0.589
+
+[俯仰] 相机 horizon 分桶:
+  水平       n= 6483  中位|err| 0.958 m bias -0.958
+  低头       n= 3174  中位|err| 0.639 m bias -0.629
+  大幅低头     n=   77  中位|err| 0.494 m bias -0.490
+
+[类别] 误差最大的（n≥20）:
+  Painting            1.941 m (n=140)
+  Vase                1.907 m (n=154)
+  Box                 1.811 m (n=95)
+  Curtains            1.535 m (n=109)
+  Statue              1.523 m (n=330)
+  HousePlant          1.506 m (n=102)
+  DishSponge          1.337 m (n=63)
+  Shelf               1.330 m (n=493)
+  ArmChair            1.301 m (n=121)
+  KeyChain            1.284 m (n=71)
+  CoffeeTable         1.281 m (n=70)
+  Bathtub             1.272 m (n=93)
