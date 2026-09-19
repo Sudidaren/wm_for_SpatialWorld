@@ -98,6 +98,13 @@ def main() -> int:
                          "(the ungated detector measurably HURTS), a large "
                          "value = only touch the frames where the floor is "
                          "unmistakable")
+    ap.add_argument("--plane-below-camera", type=float, default=0.675,
+                    help="how far below the camera the anchored plane sits. "
+                         "0.675 = counter tops on this corpus (agent y 0.901 "
+                         "+ camera offset 0.675 = 1.576 m camera height, minus "
+                         "the 0.9 m counter height); 1.576 = the real floor. "
+                         "The GT-mask variants only differ by this number, so "
+                         "running both shows what each plane buys.")
     ap.add_argument("--pool-episode", action="store_true",
                     help="estimate the metric scale per *episode* (median of "
                          "the per-frame floor estimates) instead of per frame. "
@@ -124,7 +131,8 @@ def main() -> int:
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cfg = GroundCalibConfig(fov=args.fov, convention=args.convention,
-                            stride=args.stride)
+                            stride=args.stride,
+                            cam_height=args.plane_below_camera)
     H = cfg.cam_height
 
     eval_rooms = set(json.loads((ROOT / "data/eval_rooms.json").read_text())["rooms"])

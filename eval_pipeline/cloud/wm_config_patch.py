@@ -58,18 +58,15 @@ def install(config_builder) -> None:
         world_model['obj_thr'] = 0.40                    # 与 configs/rfdetr_small.json 一致的验证阈值
         world_model['perception_runtime_root'] = WM_ROOT
         # 深度来源（消融开关）：LIGHTWM_DEPTH_SOURCE=head|da2。
-        # da2 = 公开的 Depth-Anything-V2 metric-indoor，零训练；
-        # 同一批 250 帧评测房间上实测 0.444 m vs 我们头的 0.989 m。
+        # da2 = 公开的 Depth-Anything-V2 metric-indoor，零训练；常数
+        # 1.3816 在非评测房间标定。评测房间上 0.210 m vs 我们头的 0.613 m。
         world_model['depth_source'] = os.environ.get('LIGHTWM_DEPTH_SOURCE', 'head')
         # 目标物来源（2026-09-16 决定）：不使用任何对象词表/别名表。
         # 运行时由模型自己在开局自由文本说出任务涉及的物品（target_priority）。
         # 旧的 WM_TARGET_SOURCE / WM_CONFIG_TARGETS 开关已废弃。
-        # 任务级子目标分解（消融开关）：WM_PLAN=off | old | new
-        _plan = os.environ.get('WM_PLAN', 'off').strip().lower()
-        probe['plan'] = {
-            'enabled': _plan in ('old', 'new'),
-            'prompt': _plan if _plan in ('old', 'new') else 'new',
-        }
+        # 子目标分解已删除（2026-09-17）：它没有收益，且会在上下文里塞一份
+        # 机器生成的计划。旧的 WM_PLAN 环境变量与 run_ablation.sh 里的 plan
+        # 字段保留但不再被读取（编排 spec 的位置参数不变，避免动云端发射脚本）。
         # 完成前查状态（消融开关）：WM_STATE_CHECK=1 时模型可 CheckState()
         # （旧名 WM_QUERY 仍兼容，但语义已收窄为"状态汇总"这一种查询）
         probe['object_query'] = {
@@ -79,13 +76,12 @@ def install(config_builder) -> None:
         # 目标物优先级提示（消融开关）：WM_TARGET_HINT=1 时每步报最重要的前 K 个
         # 相关物体（任务解析 > 手持/容器内容 > 已交互 > 只是见过）。
         # WM_TARGET_HINT_LIMIT 默认 5；距离/不确定度超过阈值只报方位不报距离。
-        # 记忆视野消融：LIGHTWM_MEMORY_FRAMES=0 → 只报当前帧可见的物体
-        # （同感知栈、去掉记忆），N>0 → 保留最近 N 步见过的。
-        _mf = os.environ.get('LIGHTWM_MEMORY_FRAMES')
-        probe['target_hint_memory_frames'] = None if _mf in (None, '') else int(_mf)
         probe['target_hint'] = {
             'enabled': os.environ.get('WM_TARGET_HINT', '0') == '1',
-            'memory_frames': probe.pop('target_hint_memory_frames'),
+            # 记忆视野消融：LIGHTWM_MEMORY_FRAMES=0 → 只报当前帧可见的物体
+            # （同感知栈、去掉记忆），N>0 → 保留最近 N 步见过的。
+            'memory_frames': (None if os.environ.get('LIGHTWM_MEMORY_FRAMES', '') == ''
+                              else int(os.environ['LIGHTWM_MEMORY_FRAMES'])),
             'limit': int(os.environ.get('WM_TARGET_HINT_LIMIT', '6') or 6),
             'names_limit': int(os.environ.get('WM_TARGET_HINT_NAMES', '5') or 5),
             'max_dist': float(os.environ.get('WM_TARGET_HINT_MAX_DIST', '3.0') or 3.0),
