@@ -225,7 +225,18 @@ def implied_height_map(depth: np.ndarray, horizon_deg: float, *, width: int,
 
 def floor_depth_map(horizon_deg: float, *, width: int, height: int,
                     cfg: Optional[GroundCalibConfig] = None) -> np.ndarray:
-    """True depth (metres) of the floor plane at every pixel row."""
+    """Depth the floor plane *would* have at every pixel row (metres).
+
+    This is derived, not recorded: it is ``cam_height / c(v)`` with the camera
+    height a rigid-body constant, the intrinsics fixed, and the pitch read from
+    the agent's own pose.  No simulator depth image, no annotation and no
+    segmentation takes part -- the module only ever sees the RGB frame, the
+    intrinsics, the known camera height and the agent's pitch.  The name says
+    "floor" because it is only meaningful *for a pixel that really lies on the
+    floor*; identifying those pixels is the other half of the problem (see
+    :func:`implied_height_map`, which runs the same relation backwards from the
+    predicted depth).
+    """
     cfg = cfg or GroundCalibConfig()
     c = vertical_factor(horizon_deg, width=width, height=height, cfg=cfg)
     out = np.full((int(height), int(width)), np.inf, dtype=np.float64)
