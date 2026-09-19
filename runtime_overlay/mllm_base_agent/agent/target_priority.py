@@ -185,13 +185,21 @@ class TargetHinter:
 
     def __init__(self, task_description: str, vlm: Any = None,
                  limit: int = 6, names_limit: int = 5,
-                 max_dist: float = 3.0, max_sigma: float = 0.5) -> None:
+                 max_dist: float = 3.0, max_sigma: float = 0.5,
+                 memory_frames: Optional[int] = None) -> None:
         self.task_desc = task_description or ""
         self.vlm = vlm
         self.limit = int(limit)
         self.names_limit = int(names_limit)
         self.max_dist = float(max_dist)
         self.max_sigma = float(max_sigma)
+        #: Ablation switch: how many *steps* back an object may have been last
+        #: seen and still be reported.  ``None`` = the world model's memory as
+        #: shipped (anything it ever anchored); ``0`` = only objects visible in
+        #: the current frame, i.e. the same perception stack with the memory
+        #: removed.  That arm is the one that decides whether the WM's gain
+        #: comes from remembering or merely from seeing.
+        self.memory_frames = memory_frames
         self._entries: Optional[List[Tuple[str, str]]] = None
         self._never_seen_reported: Set[str] = set()
         self._last_pose: Optional[Tuple[float, float, float]] = None
@@ -237,6 +245,16 @@ class TargetHinter:
                acts: Dict[str, Tuple[int, str, Optional[bool]]],
                holding: str, step: int) -> str:
         objects = [o for o in (wm_metadata.get("objects") or []) if isinstance(o, dict)]
+        if self.memory_frames is not None:
+            # Ablation: keep only what the current view supports.  memory_frames
+            # == 0 means "visible right now"; N > 0 also keeps anything seen in
+            # the last N steps.  The perception, the anchors and the rendering
+            # are untouched -- only the age of the evidence changes.
+            horizon = int(self.memory_frames)
+            objects = [o for o in objects
+                       if o.get("visible")
+                       or (horizon > 0
+                           and step - int(o.get("last_seen_step") or 0) <= horizon)]
         agent = wm_metadata.get("agent") or {}
         apos = agent.get("position") or {}
         yaw = float((agent.get("rotation") or {}).get("y") or 0.0)

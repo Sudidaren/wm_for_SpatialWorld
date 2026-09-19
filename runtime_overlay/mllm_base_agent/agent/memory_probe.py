@@ -14,6 +14,7 @@ arm never sees one, so the WM arm must not either.
 from __future__ import annotations
 
 import math
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -70,6 +71,14 @@ class MemoryProbe:
         outcome (``mse > 1``), and it is reported only when the world model
         could actually judge it.
         """
+        if os.environ.get("WM_NO_INJECT") == "1":
+            # Ablation: run the whole world model but say nothing.  The WM's
+            # only channel to the agent is this block, so this arm must come
+            # out identical to the plain baseline -- that is exactly the point:
+            # it proves there is no hidden path by which the memory reaches the
+            # model (no side effects on the action space, no state it can query).
+            self._pending = []
+            return ""
         parts: List[str] = []
         try:
             self._tick += 1
@@ -83,6 +92,7 @@ class MemoryProbe:
                 held0 = str((inv0[0] or {}).get("objectType") or "") if inv0 else ""
                 hinter = self._hinter
                 if hinter is None:
+                    _mf = self._target_hint.get("memory_frames")
                     hinter = tp.TargetHinter(
                         task_description=self._task_desc or "",
                         vlm=self._vlm,
@@ -90,6 +100,7 @@ class MemoryProbe:
                         names_limit=int(self._target_hint.get("names_limit", 5)),
                         max_dist=float(self._target_hint.get("max_dist", 3.0)),
                         max_sigma=float(self._target_hint.get("max_sigma", 0.5)),
+                        memory_frames=(None if _mf is None else int(_mf)),
                     )
                     self._hinter = hinter
                 block = hinter.update(wm_metadata, self._acts, held0, self._tick)

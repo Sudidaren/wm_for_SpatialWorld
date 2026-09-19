@@ -79,8 +79,13 @@ def install(config_builder) -> None:
         # 目标物优先级提示（消融开关）：WM_TARGET_HINT=1 时每步报最重要的前 K 个
         # 相关物体（任务解析 > 手持/容器内容 > 已交互 > 只是见过）。
         # WM_TARGET_HINT_LIMIT 默认 5；距离/不确定度超过阈值只报方位不报距离。
+        # 记忆视野消融：LIGHTWM_MEMORY_FRAMES=0 → 只报当前帧可见的物体
+        # （同感知栈、去掉记忆），N>0 → 保留最近 N 步见过的。
+        _mf = os.environ.get('LIGHTWM_MEMORY_FRAMES')
+        probe['target_hint_memory_frames'] = None if _mf in (None, '') else int(_mf)
         probe['target_hint'] = {
             'enabled': os.environ.get('WM_TARGET_HINT', '0') == '1',
+            'memory_frames': probe.pop('target_hint_memory_frames'),
             'limit': int(os.environ.get('WM_TARGET_HINT_LIMIT', '6') or 6),
             'names_limit': int(os.environ.get('WM_TARGET_HINT_NAMES', '5') or 5),
             'max_dist': float(os.environ.get('WM_TARGET_HINT_MAX_DIST', '3.0') or 3.0),

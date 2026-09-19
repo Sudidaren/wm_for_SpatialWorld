@@ -628,6 +628,68 @@ def test_multi_view_triangulation_is_the_metric_position():
     assert slot["tri_trust"] > 0.99, slot["tri_trust"]
 
 
+def test_memory_horizon_switch_drops_remembered_positions():
+    """``memory_frames`` is the attribution ablation.
+
+    The world model's only unique input is what it remembers.  With
+    ``memory_frames=0`` the readout may mention only what the current frame
+    shows, so the arm measures "same perception, no memory" -- the comparison
+    that decides whether the gain comes from remembering or from seeing.
+    """
+    from mllm_base_agent.agent import target_priority as tp
+
+    meta = {
+        "agent": {"position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                  "rotation": {"y": 0.0}},
+        "objects": [
+            {"objectType": "Egg", "visible": True, "distance": 1.2,
+             "sigma": 0.2, "position": {"x": 0.1, "y": 0.9, "z": 1.2},
+             "last_seen_step": 5, "contents": [], "state": {}},
+            {"objectType": "Fridge", "visible": False, "distance": 2.4,
+             "sigma": 0.3, "position": {"x": -0.4, "y": 1.0, "z": 2.3},
+             "last_seen_step": 2, "contents": [], "state": {}},
+        ],
+    }
+
+    def render(memory_frames):
+        h = tp.TargetHinter(task_description="put the egg in the fridge",
+                            vlm=None, memory_frames=memory_frames)
+        h._entries = [("Egg", "egg"), ("Fridge", "fridge")]
+        return h.update(meta, {}, "", 5)
+
+    full = render(None)
+    assert "记住的位置" in full, full          # shipped: memory is shown
+    none_mem = render(0)
+    assert "记住的位置" not in none_mem, none_mem
+    assert "目前没见过" in none_mem, none_mem
+    # a horizon that covers the sighting keeps it
+    assert "记住的位置" in render(3), render(3)
+
+
+def test_no_inject_switch_is_silent():
+    """``WM_NO_INJECT=1`` runs the whole model and injects nothing.
+
+    The prompt block is the WM's only channel, so this arm has to come out the
+    same as the plain baseline; if it does not, something else is leaking
+    memory into the agent.
+    """
+    import os
+
+    from mllm_base_agent.agent.memory_probe import MemoryProbe
+
+    probe = MemoryProbe(task_description="x")
+    meta = {"inventoryObjects": [], "objects": [],
+            "action_outcome": {"ok": True, "source": "frame_diff"}}
+    os.environ["WM_NO_INJECT"] = "1"
+    try:
+        assert probe.update(wm_metadata=meta, action_name="MoveAhead",
+                            action_ok=True) == ""
+    finally:
+        os.environ.pop("WM_NO_INJECT", None)
+    assert probe.update(wm_metadata=meta, action_name="MoveAhead",
+                        action_ok=True).startswith("🧠")
+
+
 def test_short_baseline_views_do_not_own_the_position():
     """Two rays 0.5 m apart carry almost no parallax.
 
