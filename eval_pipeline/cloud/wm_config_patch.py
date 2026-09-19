@@ -23,7 +23,11 @@ import os
 
 WM_ROOT = os.environ.get('LIGHTWM_ROOT', '/home/sudidaren/lightwm_phases')
 DETECTOR = f'{WM_ROOT}/checkpoints/rfdetr_small_228094/checkpoint_best_total.pth'
-DEPTH_CKPT = f'{WM_ROOT}/checkpoints/small_objects_20260910/dense_depth_best.pt'
+# 深度头可以换：主表要对比"旧头（v2，历史数字的来源）/ 数据域重训的头（v3）"，
+# 两者跑的是同一套 WM，只有权重不同，所以这里必须能从环境变量指过去。
+#   LIGHTWM_DEPTH_CKPT=/abs/path/to/*.pt
+DEPTH_CKPT = (os.environ.get('LIGHTWM_DEPTH_CKPT')
+              or f'{WM_ROOT}/checkpoints/small_objects_20260910/dense_depth_best.pt')
 
 
 def install(config_builder) -> None:

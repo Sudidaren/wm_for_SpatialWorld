@@ -16,6 +16,11 @@ QUEUE=("$@")
 VLLM_MODEL="${VLLM_MODEL:-/root/autodl-tmp/models/qwen3vl-30b-bf16}"
 VLLM_NAME="${VLLM_NAME:-qwen3vl-30b}"
 VLLM_PORT="${VLLM_PORT:-8000}"
+# 显存余量：Kimi-VL 的视觉塔在图片多的请求上会额外申请激活显存，0.92 让引擎在
+# 卡 A 上 OOM（2026-09-19 14:18）。留出余量比跑满更划算。
+VLLM_GPU_UTIL="${VLLM_GPU_UTIL:-0.92}"
+# 显式赋值：`${V:-{"image":32}}` 的括号在 bash 里有歧义，实测会多出一个 `}`
+if [ -z "${VLLM_MM_LIMIT:-}" ]; then VLLM_MM_LIMIT='{"image":32}'; fi
 LOGDIR=/root/autodl-tmp/logs
 DISPLAY_NUM="${ORCH_DISPLAY:-:99}"
 mkdir -p "$LOGDIR"
@@ -35,8 +40,8 @@ else
   export VLLM_USE_FLASHINFER_SAMPLER=0
   setsid nohup /root/miniconda3/bin/vllm serve "$VLLM_MODEL" \
     --served-model-name "$VLLM_NAME" --host 127.0.0.1 --port "$VLLM_PORT" \
-    --max-model-len 32768 --gpu-memory-utilization 0.92 \
-    --limit-mm-per-prompt '{"image":32}' --trust-remote-code \
+    --max-model-len 32768 --gpu-memory-utilization "$VLLM_GPU_UTIL" \
+    --limit-mm-per-prompt "$VLLM_MM_LIMIT" --trust-remote-code \
     > "$LOGDIR/vllm.log" 2>&1 < /dev/null &
   echo "   starting; waiting for /v1/models (up to 20 min)"
   for i in $(seq 1 120); do

@@ -29,30 +29,16 @@ PIDFILE="${PIDFILE:-/root/keepalive.pid}"
 echo $$ > "$PIDFILE"
 trap 'rm -f "$PIDFILE"' EXIT
 
-log "keepalive start (launch=$LAUNCH interval=${INTERVAL}s max=${MAX_RESTARTS} pid=$$)"
-restarts=0
-while true; do
-  sleep "$INTERVAL"
-  if [ -f /root/keepalive.off ]; then
-    log "keepalive.off present -> stop"
-    exit 0
-  fi
-  if [ ! -f "$LAUNCH" ]; then
-    log "no launch script at $LAUNCH -> stop"
-    exit 0
-  fi
-  # awk, not pgrep: this script names the orchestrator script, so a pattern
-  # match would find itself.
-  if [ -n "$(ps -eo pid=,args= | awk '/cloud_orchestrator_v4\.sh [a-z0-9]/{print $1}')" ]; then
-    continue
-  fi
-
-  # The orchestrator can also exit on purpose, when every stage is finished.
-  # The arms it owns are listed in /root/keepalive.arms, so "finished" is a
-  # question about those runs only -- not about every run dir on the box.
-  still_open=$(/root/miniconda3/bin/python - <<'PY' 2>/dev/null || echo 1
+# How many of this card's arms still have work left.  Only the runs listed in
+# /root/keepalive.arms count: the boxes also hold historical batches the paper
+# cites, and those must never make this loop think work is outstanding.
+still_open() {
+  /root/miniconda3/bin/python - <<'PY' 2>/dev/null || echo 1
 import json, os
-arms = [a.strip() for a in open('/root/keepalive.arms') if a.strip()]
+try:
+    arms = [a.strip() for a in open('/root/keepalive.arms') if a.strip()]
+except Exception:
+    print(1); raise SystemExit
 try:
     total = int(open('/root/keepalive.total').read().strip())
 except Exception:
@@ -76,15 +62,105 @@ for a in arms:
         open_n += 1
 print(open_n)
 PY
-)
-  if [ "${still_open:-0}" = "0" ]; then
+}
+
+log "keepalive start (launch=$LAUNCH interval=${INTERVAL}s max=${MAX_RESTARTS} pid=$$)"
+restarts=0
+vllm_bad=0
+stack_restarts=0
+while true; do
+  sleep "$INTERVAL"
+  if [ -f /root/keepalive.off ]; then
+    log "keepalive.off present -> stop"
+    exit 0
+  fi
+  if [ ! -f "$LAUNCH" ]; then
+    log "no launch script at $LAUNCH -> stop"
+    exit 0
+  fi
+  # Finished cards must stop before the vLLM check: a card that is done has
+  # no reason to keep a model server, and restarting the stack for it would
+  # spin forever.
+  if [ "$(still_open)" = "0" ]; then
     log "every arm in keepalive.arms is finished -> stop"
     exit 0
   fi
-  if [ ! -f /root/keepalive.arms ]; then
-    log "no /root/keepalive.arms -> stop (nothing to finish)"
-    exit 0
+  # -- vLLM health -------------------------------------------------------
+  # A dead or OOM-killed server does not stop the arm: every remaining task
+  # just records a model failure, and the batch looks like a result.  Card A
+  # lost its engine to CUDA OOM at 14:18 and kept "running" for 30 minutes.
+  vllm_ok=1
+  if ! curl -sf -m 6 http://127.0.0.1:8000/v1/models >/dev/null 2>&1; then
+    vllm_ok=0
+    if pgrep -f "[v]llm serve" >/dev/null 2>&1; then
+      vllm_bad=$((vllm_bad + 1))
+      log "vLLM process alive, endpoint down (check $vllm_bad/4; a first load takes ~4 min)"
+      [ "$vllm_bad" -lt 4 ] && continue
+      log "vLLM unresponsive for $vllm_bad checks -> restart the whole stack"
+    else
+      log "vLLM process is gone -> restart the whole stack"
+    fi
+  else
+    vllm_bad=0
   fi
+
+  if [ "$vllm_ok" = "0" ]; then
+    if [ "$stack_restarts" -ge "$MAX_RESTARTS" ]; then
+      log "max stack restarts ($MAX_RESTARTS) reached -> stop (inspect by hand)"
+      exit 0
+    fi
+    stack_restarts=$((stack_restarts + 1))
+    # stop the control plane and the arms, then let arm_launch.sh bring the
+    # whole thing back (it starts vLLM, waits for the endpoint, then the queue)
+    #
+    # The vLLM process has to go too, even when it looks alive: an API server
+    # whose engine died still holds its GPU allocation, and the fresh server
+    # then refuses to start ("Free memory 66.75/94.97 GiB is less than desired
+    # 0.78") -- that is exactly how card E sat in a restart loop.
+    for p in $(pgrep -f "[v]llm serve"); do
+      log "  killing stale vLLM pid=$p (engine dead, still holding GPU)"
+      kill -TERM "$p" 2>/dev/null
+    done
+    for p in $(ps -eo pid=,args= | awk '/cloud_orchestrator_v4\.sh [a-z0-9]/{print $1}'); do
+      kill -TERM "$p" 2>/dev/null
+    done
+    sleep 8
+    for p in $(pgrep -f "[v]llm serve"); do kill -9 "$p" 2>/dev/null; done
+    # wait for the GPU to actually come back before launching another server
+    for _ in $(seq 1 12); do
+      used=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1)
+      [ -z "$used" ] && break
+      [ "$used" -lt 2000 ] && break
+      sleep 5
+    done
+    log "  GPU after cleanup: $(nvidia-smi --query-gpu=memory.used --format=csv,noheader 2>/dev/null | head -1)"
+    for arm in $(cat /root/keepalive.arms 2>/dev/null); do
+      for p in $(pgrep -f "[p]ython -u -"); do
+        if tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qx "RUN_NAME=$arm"; then
+          log "  stopping arm $arm (supervisor pid=$p)"
+          for c in $(pgrep -P "$p" 2>/dev/null); do
+            for g in $(pgrep -P "$c" 2>/dev/null); do kill -9 "$g" 2>/dev/null; done
+            kill -9 "$c" 2>/dev/null
+          done
+          kill -9 "$p" 2>/dev/null
+        fi
+      done
+    done
+    sleep 3
+    log "  stack restart #$stack_restarts"
+    setsid nohup bash "$LAUNCH" > /root/orch_keepalive.out 2>&1 < /dev/null &
+    sleep 30
+    vllm_bad=0
+    continue
+  fi
+
+  # awk, not pgrep: this script names the orchestrator script, so a pattern
+  # match would find itself.
+  if [ -n "$(ps -eo pid=,args= | awk '/cloud_orchestrator_v4\.sh [a-z0-9]/{print $1}')" ]; then
+    continue
+  fi
+
+  still_open=$(still_open)
   if [ "$restarts" -ge "$MAX_RESTARTS" ]; then
     log "max restarts ($MAX_RESTARTS) reached -> stop (inspect by hand)"
     exit 0

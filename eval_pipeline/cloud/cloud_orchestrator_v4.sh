@@ -127,24 +127,35 @@ kill_batch() {
   sleep 3
 }
 
-start_batch() {   # model url plan profile run workers
-  local model="$1" url="$2" plan="$3" profile="$4" rn="$5" workers="$6"
-  log "启动 $rn (model=$model plan=$plan profile=$profile workers=$workers)"
+start_batch() {   # model url plan profile run workers [extra_env]
+  local model="$1" url="$2" plan="$3" profile="$4" rn="$5" workers="$6" extra="${7:-}"
+  log "启动 $rn (model=$model plan=$plan profile=$profile workers=$workers env=${extra:-<none>})"
   # AI2THOR_* timeout: 软件渲染(Xvfb)下场景装载只要被抢 CPU 就可能超过 ai2thor
   # 默认的 100s server_timeout，进而被误判成环境故障。放宽到 300s/600s。
-  WM_HISTORY_TURNS=29 WM_HISTORY_MAX_SIDE=0 \
-    AI2THOR_SERVER_TIMEOUT="${AI2THOR_SERVER_TIMEOUT:-300}" \
-    AI2THOR_START_TIMEOUT="${AI2THOR_START_TIMEOUT:-600}" \
-    MODEL_NAME="$model" BASE_URL="$url" PLAN="$plan" PROFILE="$profile" \
-    RUN_NAME="$rn" SCENES="$SCENES" WORKERS="$workers" \
-    setsid nohup bash /home/sudidaren/spatialworld_eval/run_ablation.sh \
-    > "/root/run_${rn}.log" 2>&1 < /dev/null &
+  # 每个臂自带环境变量（spec 的第 7 段，`K=V;K=V`）。一条队列里要塞
+  # 不同配置（换深度源、换头、换标定常数）就必须有这个，否则整条队列共用
+  # 一套 env，"换个头再跑"只能一条条手动开。
+  (
+    if [ -n "$extra" ]; then
+      IFS=';' read -r -a _pairs <<< "$extra"
+      for _kv in "${_pairs[@]}"; do
+        [ -n "$_kv" ] && export "$_kv"
+      done
+    fi
+    WM_HISTORY_TURNS="${WM_HISTORY_TURNS:-29}" WM_HISTORY_MAX_SIDE="${WM_HISTORY_MAX_SIDE:-0}" \
+      AI2THOR_SERVER_TIMEOUT="${AI2THOR_SERVER_TIMEOUT:-300}" \
+      AI2THOR_START_TIMEOUT="${AI2THOR_START_TIMEOUT:-600}" \
+      MODEL_NAME="$model" BASE_URL="$url" PLAN="$plan" PROFILE="$profile" \
+      RUN_NAME="$rn" SCENES="$SCENES" WORKERS="$workers" \
+      setsid nohup bash /home/sudidaren/spatialworld_eval/run_ablation.sh \
+      > "/root/run_${rn}.log" 2>&1 < /dev/null &
+  )
   sleep 20
 }
 
 # 返回 0 = 仍需继续（未完成），1 = 该批次已完成
-ensure_batch() {  # model url plan profile run workers
-  local model="$1" url="$2" plan="$3" profile="$4" rn="$5" workers="$6"
+ensure_batch() {  # model url plan profile run workers [extra_env]
+  local model="$1" url="$2" plan="$3" profile="$4" rn="$5" workers="$6" extra="${7:-}"
   local n t pid age el
   if [ -f "$STOP_FILE" ] && grep -qx "$rn" "$STOP_FILE" 2>/dev/null; then
     log "$rn 在停测名单中 -> 视为已完成，不再拉起"
@@ -167,14 +178,14 @@ ensure_batch() {  # model url plan profile run workers
   if [ -z "$pid" ]; then
     log "$rn 无进程 (已终结 $t/$TOTAL, 计分 $n) -> 启动"
     kill_batch "$rn"
-    start_batch "$model" "$url" "$plan" "$profile" "$rn" "$workers"
+    start_batch "$model" "$url" "$plan" "$profile" "$rn" "$workers" "$extra"
     return 0
   fi
   age=$(newest_age "$rn"); el=$(sup_elapsed "$pid")
   if [ "${age:-0}" -gt "$IDLE_LIMIT" ] && [ "${el:-0}" -gt "$IDLE_LIMIT" ]; then
     log "$rn 卡住 ${age}s (已终结 $t/$TOTAL, 计分 $n, pid=$pid) -> 重启"
     kill_batch "$rn"
-    start_batch "$model" "$url" "$plan" "$profile" "$rn" "$workers"
+    start_batch "$model" "$url" "$plan" "$profile" "$rn" "$workers" "$extra"
     return 0
   fi
   log "$rn 运行中 计分 $n/已终结 $t/$TOTAL (最新产出 ${age}s 前)"
@@ -186,8 +197,8 @@ wait_stage() {   # 参数为若干 spec；全部完成后返回
   while true; do
     pending=0
     for spec in "$@"; do
-      IFS='|' read -r model url plan profile rn workers <<< "$spec"
-      ensure_batch "$model" "$url" "$plan" "$profile" "$rn" "$workers" || continue
+      IFS='|' read -r model url plan profile rn workers envspec <<< "$spec"
+      ensure_batch "$model" "$url" "$plan" "$profile" "$rn" "$workers" "${envspec:-}" || continue
       pending=1
     done
     [ "$pending" -eq 0 ] && { log "阶段完成"; return 0; }

@@ -32,6 +32,11 @@ KEEPALIVE = "/home/sudidaren/lightwm_phases/tools/card_keepalive.sh"
 ARM_LAUNCH = "/root/arm_launch.sh"
 ORCH_SRC = Path(__file__).resolve().parents[2] / "spatialworld_eval/cloud_orchestrator_v4.sh"
 ORCH_DST = "/home/sudidaren/spatialworld_eval/cloud_orchestrator_v4.sh"
+RUN_ABL_SRC = Path(__file__).resolve().parents[2] / "spatialworld_eval/run_ablation.sh"
+WM_PATCH_SRC = Path(__file__).resolve().parents[2] / "spatialworld_eval/wm_config_patch.py"
+SW_ROOT = Path(__file__).resolve().parents[2] / "SpatialWorld"
+REGISTRY_SRC = SW_ROOT / "mllm_base_agent/prompts/registry.py"
+REGISTRY_DST = "/home/sudidaren/SpatialWorld/mllm_base_agent/prompts/registry.py"
 
 
 def push_tools(sftp) -> None:
@@ -48,6 +53,13 @@ def push_tools(sftp) -> None:
     sftp.put(str(here / "card_keepalive.sh"), KEEPALIVE)
     if ORCH_SRC.exists():
         sftp.put(str(ORCH_SRC), ORCH_DST)
+    if RUN_ABL_SRC.exists():
+        sftp.put(str(RUN_ABL_SRC), "/home/sudidaren/spatialworld_eval/run_ablation.sh")
+    if WM_PATCH_SRC.exists():
+        sftp.put(str(WM_PATCH_SRC), "/home/sudidaren/spatialworld_eval/wm_config_patch.py")
+    if REGISTRY_SRC.exists():
+        # the same-information baseline (T5) needs the WM_PROMPT_EXTRA hook
+        sftp.put(str(REGISTRY_SRC), REGISTRY_DST)
 
 
 def sh(parts: list[str]) -> str:
@@ -93,6 +105,14 @@ def stop_helpers(tag: str, kill_orchestrator: bool) -> str:
     """
     lines = [
         "set -u",
+        # The keepalive must go first: it restarts the orchestrator within its
+        # poll interval, and if it fires between "stop" and "write the new
+        # queue" it resurrects the old one (that is how card D kept running
+        # yesterday's arm list after a relaunch).
+        'echo "--- stop keepalive ---"',
+        'if [ -f /root/keepalive.pid ] && kill -0 "$(cat /root/keepalive.pid)" 2>/dev/null; then',
+        '  echo "  keepalive pid=$(cat /root/keepalive.pid)"; '
+        'kill -TERM "$(cat /root/keepalive.pid)" 2>/dev/null; fi',
         'echo "--- stop watchdog ---"',
         'for p in $(pgrep -f "[c]ard_watchdog.sh"); do echo "  watchdog pid=$p"; '
         'kill -TERM "$p" 2>/dev/null; done',
@@ -248,6 +268,27 @@ def refresh_orchestrator(tag: str) -> str:
     ])
 
 
+def restart_keepalive(tag: str) -> str:
+    """Restart the keepalive process in place, keeping arm_launch.sh as is."""
+    return "\n".join([
+        "set -u",
+        'if [ -f /root/keepalive.pid ] && kill -0 "$(cat /root/keepalive.pid)" 2>/dev/null; then',
+        '  echo "stopping keepalive $(cat /root/keepalive.pid)"; '
+        'kill -TERM "$(cat /root/keepalive.pid)" 2>/dev/null; sleep 3',
+        "fi",
+        'if [ ! -f ' + ARM_LAUNCH + ' ]; then echo "no ' + ARM_LAUNCH + ' -> not starting"; exit 1; fi',
+        f"setsid nohup env LAUNCH={ARM_LAUNCH} INTERVAL=90 MAX_RESTARTS=12 bash {KEEPALIVE} "
+        "> /root/autodl-tmp/logs/keepalive.boot.log 2>&1 < /dev/null &",
+        "sleep 3",
+        'if [ -f /root/keepalive.pid ] && kill -0 "$(cat /root/keepalive.pid)" 2>/dev/null; then',
+        '  echo "keepalive ok (pid $(cat /root/keepalive.pid))"',
+        "else",
+        '  echo "keepalive FAILED"',
+        "fi",
+        'tail -2 /root/autodl-tmp/logs/keepalive.log 2>/dev/null',
+    ])
+
+
 def launch(tag: str, arms: list[str], env_pairs: dict[str, str],
            archive: str | None, watchdog_interval: int) -> str:
     lines = ["set -u"]
@@ -326,7 +367,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("action",
                     choices=["probe", "stop", "launch", "stop-helpers", "ensure-keepalive",
-                             "smoke", "restart-watchdog", "refresh-orchestrator"])
+                             "smoke", "restart-watchdog", "refresh-orchestrator",
+                             "restart-keepalive"])
     ap.add_argument("card")
     ap.add_argument("--run", help="run name (stop)")
     ap.add_argument("--arm", action="append", default=[],
@@ -369,6 +411,15 @@ def main() -> int:
         finally:
             c.close()
         script = refresh_orchestrator(args.card)
+    elif args.action == "restart-keepalive":
+        c = connect(args.card)
+        try:
+            sftp = c.open_sftp()
+            sftp.put(str(Path(__file__).with_name("card_keepalive.sh")), KEEPALIVE)
+            sftp.close()
+        finally:
+            c.close()
+        script = restart_keepalive(args.card)
     elif args.action == "ensure-keepalive":
         if not args.arm:
             ap.error("ensure-keepalive needs the --arm list the keepalive should re-run")

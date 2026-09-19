@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 消融实验统一入口：
 #   PROFILE=llm  -> 纯模型基线（无 WM）
-#   PROFILE=wm   -> WM 接入；PLAN=off|old|new 控制子目标分解
+#   PROFILE=wm   -> WM 接入（PLAN 字段已废弃：子目标分解 2026-09-17 删除）
 #
 # 用法：
 #   MODEL_NAME=qwen3vl-8b BASE_URL=http://127.0.0.1:18001/v1 PLAN=off \
@@ -18,7 +18,6 @@ RUN_NAME="${RUN_NAME:-ablation_run}"
 SCENES="${SCENES:-ai2thor,procthor}"
 WORKERS="${WORKERS:-4}"
 
-export WM_PLAN="$PLAN"
 export LIGHTWM_ROOT=/home/sudidaren/lightwm_phases
 export LIGHTWM_STORAGE_ROOT=/home/sudidaren/lightwm_phases
 export LIGHTWM_DETECTOR=rfdetr_small_depth
@@ -51,7 +50,7 @@ workers = int(workers_s)
 
 if profile == 'wm':
     import wm_config_patch
-    wm_config_patch.install(cb)          # 感知后端 + 计划开关（WM_PLAN）
+    wm_config_patch.install(cb)          # 感知后端 + WM 提示开关
     cfg.PERCEPTION_CKPT = (f'{wm_config_patch.WM_ROOT}/checkpoints'
                            '/small_objects_20260910/dense_depth_best.pt')
 
@@ -75,7 +74,11 @@ cfg.LLM_OVERRIDES = {
     'provider': 'openai',
     'model_name': model_name,
     'base_url': base_url,
-    'api_key': 'EMPTY',
+    # 本地 vLLM 不校验 key，所以卡上的臂一直用占位符。走外部网关（例如
+    # WM+Gemini）时必须带真 key：LLM_API_KEY 优先，其次 OPENAI_API_KEY。
+    'api_key': (os.environ.get('LLM_API_KEY')
+                or os.environ.get('OPENAI_API_KEY')
+                or 'EMPTY'),
 }
 cfg.HEADLESS = False
 if os.environ.get('HEADLESS') == '1':
