@@ -106,13 +106,16 @@ def _code_only(path: Path) -> str:
     return ast.unparse(tree)
 
 
-def meta(agent_xy=(0.0, 0.0), yaw=0.0, objects=(), held=None):
+def meta(agent_xy=(0.0, 0.0), yaw=0.0, objects=(), held=None, states=None):
+    states = states or {}
     return {
         "agent": {"position": {"x": agent_xy[0], "y": 0.9, "z": agent_xy[1]},
                   "rotation": {"x": 0.0, "y": yaw, "z": 0.0}},
         "objects": [
             {"objectType": t, "position": {"x": x, "y": y, "z": z},
-             "visible": vis, "distance": dist, "sigma": sig}
+             "visible": vis, "distance": dist, "sigma": sig,
+             "last_seen_step": 1, "contents": [],
+             "state": states.get(t, {})}
             for (t, x, y, z, vis, dist, sig) in objects
         ],
         "inventoryObjects": ([{"objectId": "det|" + held + "|1",
@@ -347,6 +350,74 @@ def test_check_state_summary_is_scoped_to_task_objects():
     finally:
         os.environ.pop("LIGHTWM_STATE_SCOPE", None)
     assert "Statue" in full, full
+
+
+def _probe(task: str):
+    from mllm_base_agent.agent.memory_probe import MemoryProbe
+
+    p = MemoryProbe(task_description=task)
+    p.set_target_hint({"enabled": True})
+    return p
+
+
+def test_nav_advice_only_for_an_invisible_target():
+    p = _probe("open the fridge")
+    far = p.update(wm_metadata=meta(objects=[("Fridge", 0.0, 0.9, 2.0, False, 2.0, 0.2)]),
+                   action_name="RotateLeft", action_ok=True)
+    # 建议贴在目标那一行末尾，不再另起一行重复位置
+    assert "Fridge（任务目标）" in far and "建议先转向它再靠近" in far, far
+    assert "建议：" not in far, far
+    p2 = _probe("open the fridge")
+    near = p2.update(wm_metadata=meta(objects=[("Fridge", 0.0, 0.9, 1.0, True, 1.0, 0.2)]),
+                     action_name="RotateLeft", action_ok=True)
+    assert "建议" not in near, near
+
+
+def test_nav_advice_skipped_when_the_goal_is_already_satisfied():
+    p = _probe("please turn off the desk lamp")
+    block = p.update(
+        wm_metadata=meta(objects=[("DeskLamp", 0.0, 0.9, 2.0, False, 2.0, 0.2)],
+                         states={"DeskLamp": {"isToggled": False}}),
+        action_name="RotateLeft", action_ok=True)
+    assert "建议：" not in block, block      # 已经关掉了，别再指使模型跑一趟
+
+
+def test_stuck_hint_fires_once_per_stuck_episode():
+    p = _probe("open the fridge")
+    args = dict(wm_metadata=meta(objects=[("Fridge", 0.0, 0.9, 2.0, False, 2.0, 0.2)]),
+                action_name="MoveAhead", action_ok=False)
+    first = p.update(**args)
+    assert "重复提示" not in first, first
+    p.update(**args)
+    third = p.update(**args)
+    assert "重复提示" in third, third
+    fourth = p.update(**args)
+    assert "重复提示" not in fourth, fourth   # 同一个卡死状态不反复念
+
+
+def test_stuck_hint_rearms_after_a_success():
+    p = _probe("open the fridge")
+    bad = dict(wm_metadata=meta(objects=[("Fridge", 0.0, 0.9, 2.0, False, 2.0, 0.2)]),
+               action_name="MoveAhead", action_ok=False)
+    for _ in range(3):
+        p.update(**bad)
+    p.update(wm_metadata=meta(objects=[("Fridge", 0.0, 0.9, 2.0, False, 2.0, 0.2)]),
+             action_name="MoveAhead", action_ok=True)     # 成功一次 -> 重新武装
+    for _ in range(2):
+        p.update(**bad)
+    again = p.update(**bad)
+    assert "重复提示" in again, again
+
+
+def test_reach_hint_says_how_much_closer():
+    p = _probe("pick up the mug")
+    block = p.update(wm_metadata=meta(objects=[("Mug", 0.0, 0.9, 1.6, True, 1.6, 0.2)]),
+                     action_name="PickupObject", object_type="Mug", action_ok=False)
+    assert "距离提示" in block and "还差约 0.6m" in block, block
+    p2 = _probe("pick up the mug")
+    near = p2.update(wm_metadata=meta(objects=[("Mug", 0.0, 0.9, 0.8, True, 0.8, 0.2)]),
+                     action_name="PickupObject", object_type="Mug", action_ok=False)
+    assert "距离提示" not in near, near
 
 
 def test_world_model_builds_anchors_and_dead_reckons():

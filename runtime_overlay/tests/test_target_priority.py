@@ -122,15 +122,19 @@ def test_hint_skips_visible_and_memory_only():
     assert "记住的位置在正前方约 2.0m" in text, text
 
 
-def test_pose_trigger_shortens_repeat():
+def test_position_is_repeated_every_step():
+    """2026-09-19：取消了"位置同上"压缩，每步都照常给完整位置。"""
     vlm = StubVLM(["Laptop"])
     h = tp.TargetHinter("open the laptop", vlm=vlm)
     m = meta([obj("Laptop", dist=2.0, x=0.0, z=2.0)])
     assert "约 2.0m" in h.update(m, {}, "", 1)
-    assert "位置同上" in h.update(m, {}, "", 2)
+    again = h.update(m, {}, "", 2)
+    assert "位置同上" not in again, again
+    assert "约 2.0m" in again, again
+    # 走近了（目标在正前方 1.0m）——仍然每步给完整位置
     moved = h.update(meta([obj("Laptop", dist=1.0, x=0.0, z=1.0)],
-                          agent_xy=(0.0, 1.0)), {}, "", 3)
-    assert "位置同上" not in moved, moved
+                          agent_xy=(0.0, 0.0)), {}, "", 3)
+    assert "约 1.0m" in moved, moved
 
 
 def test_quota_and_settled_demotion():

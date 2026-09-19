@@ -269,7 +269,9 @@ class TargetHinter:
         self._entries: Optional[List[Tuple[str, str]]] = None
         self._never_seen_reported: Set[str] = set()
         self._last_pose: Optional[Tuple[float, float, float]] = None
-        self._last_lines: Dict[str, str] = {}
+        #: last step's distance to the nearest not-visible relevant object, so
+        #: the advice line can say "you are moving away" when that is true.
+        self._last_gap: Optional[float] = None
 
     # -- the model's own object list ---------------------------------
     def entries(self) -> List[Tuple[str, str]]:
@@ -292,6 +294,39 @@ class TargetHinter:
         else:
             self._relevant |= relevant_types(self.task_desc, detected)
         return set(self._relevant)
+
+    def nearest(self, wm_metadata: Dict, visible: Optional[bool] = None
+                ) -> Optional[Tuple[str, float, str]]:
+        """(type, distance, direction word) of the nearest relevant object.
+
+        ``visible`` filters to objects the current frame shows (True) or to
+        objects the memory has but the frame does not (False).
+        """
+        agent = wm_metadata.get("agent") or {}
+        apos = agent.get("position") or {}
+        yaw = float((agent.get("rotation") or {}).get("y") or 0.0)
+        ax, az = apos.get("x"), apos.get("z")
+        best: Optional[Tuple[str, float, str]] = None
+        for obj in (wm_metadata.get("objects") or []):
+            tp = str(obj.get("objectType") or "")
+            if tp not in self._relevant:
+                continue
+            if visible is not None and bool(obj.get("visible")) != visible:
+                continue
+            dist = obj.get("distance")
+            word = "某处"
+            pos = obj.get("position") or {}
+            if ax is not None and az is not None and pos.get("x") is not None:
+                dx = float(pos["x"]) - float(ax)
+                dz = float(pos.get("z") or 0.0) - float(az)
+                dist = math.hypot(dx, dz)
+                word = direction_word(dx, dz, yaw)
+            if dist is None:
+                continue
+            dist = float(dist)
+            if best is None or dist < best[1]:
+                best = (tp, dist, word)
+        return best
 
     def model_names(self) -> List[str]:
         return [env for env, _ in self.entries()]
@@ -378,6 +413,7 @@ class TargetHinter:
         settled = settled_by_predicate(self.task_desc, entries, states, contents)
 
         rows: List[Dict[str, Any]] = []
+        rows_gap: List[Tuple[float, str, str]] = []
         candidates: Set[str] = set(wanted) | set(by_type) | ({holding} if holding else set())
         for tp, inside in contents.items():
             candidates.add(tp)
@@ -454,6 +490,7 @@ class TargetHinter:
                 break
 
         lines = list(unseen_lines)
+        nav_best: Optional[Tuple[float, int]] = None      # (距离, 行号)
         for row in chosen:
             tp = row["type"]
             label = f"{tp}（{TIER_LABEL[row['tier']]}"
@@ -483,10 +520,27 @@ class TargetHinter:
             line = f"- {label}：{body}"
             if row["acts"]:
                 line += f"；最近交互 step {row['acts'][0]} {row['acts'][1]}"
-            if not pose_changed and self._last_lines.get(tp) == line:
-                line = f"- {label}：位置同上"
-            self._last_lines[tp] = line
             lines.append(line)
+            if row["tier"] == 1 and dist is not None:
+                rows_gap.append((float(dist), tp, word))
+                if nav_best is None or float(dist) < nav_best[0]:
+                    nav_best = (float(dist), len(lines) - 1)
+
+        # ② 导航建议：贴在"看不见的那个最近的任务目标"那一行的末尾。
+        #    不另起一行——同一段文字里说两遍位置只会给模型添负担。
+        #    候选来自上面的 rows：已经可见的、以及谓词已满足的（比如已经关掉
+        #    的那盏灯）都不在内，否则会指使模型再跑一趟。
+        if os.environ.get("LIGHTWM_NAV_HINT", "1") != "0":
+            if nav_best is not None:
+                dist, idx = nav_best
+                tail = ""
+                if (self._last_gap is not None
+                        and dist > self._last_gap + 0.05):
+                    tail = f"（注意：你在远离它，上一步 {self._last_gap:.1f}m → 现在 {dist:.1f}m）"
+                lines[idx] += f"——建议先转向它再靠近{tail}"
+                self._last_gap = dist
+            else:
+                self._last_gap = None
 
         names_line = []
         for tp, obj in sorted(by_type.items(),

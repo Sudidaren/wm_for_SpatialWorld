@@ -21,6 +21,12 @@ from typing import Any, Dict, List, Optional, Tuple
 _DIR_WORDS = ("正前方", "右前方", "正右方", "右后方",
               "正后方", "左后方", "正左方", "左前方")
 
+#: 移动/转向类动作（用于区分"被挡在原地打转"和"交互没成功"）
+_MOVE_ACTIONS = frozenset({"MoveAhead", "MoveBack", "MoveLeft", "MoveRight",
+                           "RotateLeft", "RotateRight", "LookUp", "LookDown"})
+#: 模拟器的交互距离上限（环境规格，不是任务答案）
+_REACH_M = 1.0
+
 def _direction_word(dx: float, dz: float, yaw: float) -> str:
     """World-space delta -> egocentric 8-way direction label."""
     rad = math.radians(float(yaw))
@@ -47,6 +53,9 @@ class MemoryProbe:
         self._tick: int = 0
         self._hinter = None
         self._vlm = None                # 模型自己；用于开局自述任务物品
+        #: 最近几个 (动作, 是否改变了画面)，用于识别"卡死在重复同一个动作"
+        self._recent: List[Tuple[str, Optional[bool]]] = []
+        self._stuck_for: Optional[str] = None
 
     def set_target_hint(self, cfg: Optional[Dict[str, Any]]) -> None:
         self._target_hint = dict(cfg or {})
@@ -123,6 +132,39 @@ class MemoryProbe:
             # 同理：成功的那一步画面自己会说明，只有失败才值得占 token。
             if action_name and action_ok is False:
                 parts.append(f"上一个动作：{action_name}（失败：画面未变化）")
+
+            # ③ 卡死纠错：同一个动作连续 3 次没让画面变化 -> 换策略。
+            #    每次"卡死"只提示一次（动作变了或成功了就重新武装），并且
+            #    只给一句、不引入新概念，避免变成噪声。
+            if action_name and os.environ.get("LIGHTWM_STUCK_HINT", "1") != "0":
+                name = str(action_name)
+                self._recent.append((name, action_ok))
+                self._recent = self._recent[-6:]
+                same = [ok for a, ok in self._recent if a == name]
+                stuck = len(same) >= 3 and all(ok is False for ok in same[-3:])
+                if stuck and self._stuck_for != name:
+                    self._stuck_for = name
+                    if name in _MOVE_ACTIONS:
+                        parts.append(
+                            f"重复提示：{name} 已连续 3 次没有改变画面——"
+                            f"换成先 RotateLeft(90)/RotateRight(90) 环视，再从别的方向靠近，不要继续重复")
+                    else:
+                        parts.append(
+                            f"重复提示：{name} 已连续 3 次没有成功——"
+                            f"先确认目标就在视野内并走到 1m 以内，或者换一个目标物")
+                elif not stuck:
+                    self._stuck_for = None
+
+            # ④ 交互失败且目标还太远 -> 直接告诉它还差多少（可执行的数字）
+            if (action_name and action_ok is False
+                    and str(action_name) not in _MOVE_ACTIONS
+                    and os.environ.get("LIGHTWM_REACH_HINT", "1") != "0"
+                    and self._hinter is not None):
+                gap = self._hinter.nearest(wm_metadata, visible=True)
+                if gap is not None and gap[1] > _REACH_M:
+                    parts.append(
+                        f"距离提示：{gap[0]} 在{gap[2]}约 {gap[1]:.1f}m，"
+                        f"要先走到 1m 以内才能交互（还差约 {gap[1] - _REACH_M:.1f}m）")
         except Exception:
             import os as _os
             if _os.environ.get("WM_DEBUG"):
