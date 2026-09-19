@@ -141,3 +141,8 @@ class MemoryProbe:
             "🧠 [SpatialMemory] 世界模型提供的当前状态（基于自身感知与动作日志，请直接采信）：\n"
             f"{body}"
         )
+
+    def relevant_types(self) -> set:
+        """任务相关物体集合（供 CheckState 汇总收窄用；未开提示时为空）。"""
+        hinter = self._hinter
+        return set(getattr(hinter, "_relevant", None) or set())

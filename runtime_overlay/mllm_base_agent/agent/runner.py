@@ -671,6 +671,8 @@ def act_node(state: AgentState) -> AgentState:
                 if state['_mem_pending']:
                     print(f"\n[MemoryProbe] step {state.get('step_count', 0)}: "
                           f"{state['_mem_pending'].replace(chr(10), ' | ')}", flush=True)
+                # 供 CheckState 汇总收窄：只列任务相关（+交互过）的物体
+                state['_wm_relevant_types'] = probe.relevant_types()
                 oq_cfg = _object_query_cfg(state)
                 if oq_cfg.get('enabled'):
                     from mllm_base_agent.agent import object_query as oq

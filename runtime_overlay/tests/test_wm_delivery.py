@@ -321,6 +321,34 @@ def test_check_state_returns_summary_once():
     assert oq.render_block(st, step=5) == "", "the summary is shown once"
 
 
+def test_check_state_summary_is_scoped_to_task_objects():
+    """The dump is a pre-DONE check, so it lists the task's objects, not the room.
+
+    2026-09-19: before this, ``CheckState()`` returned every object the WM had
+    ever anchored (up to 12), so a statue the agent walked past took the space
+    that the target needed.
+    """
+    from mllm_base_agent.agent import object_query as oq
+
+    st = {"config": {"memory_probe": {"object_query": {"enabled": True}}},
+          "step_count": 0, "_wm_relevant_types": {"Apple"}}
+    mem = oq.memory_of(st)
+    mem.observe(meta(objects=[("Apple", 0.0, 0.9, 2.0, True, 2.0, 0.3),
+                              ("Statue", 1.0, 0.9, 3.0, True, 3.0, 0.3)]), step=3)
+    oq.apply_query(st, "__all__", 3)
+    scoped = oq.render_block(st, step=4)
+    assert "Apple" in scoped, scoped
+    assert "Statue" not in scoped, scoped
+
+    st["_summary_pending"] = True
+    os.environ["LIGHTWM_STATE_SCOPE"] = "all"
+    try:
+        full = oq.render_block(st, step=5)
+    finally:
+        os.environ.pop("LIGHTWM_STATE_SCOPE", None)
+    assert "Statue" in full, full
+
+
 def test_world_model_builds_anchors_and_dead_reckons():
     import numpy as np
 

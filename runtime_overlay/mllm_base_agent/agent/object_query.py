@@ -20,6 +20,7 @@ runner behaves exactly as before.
 from __future__ import annotations
 
 import math
+import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -183,19 +184,35 @@ class ObjectMemory:
             head += f"；最近交互 step {step_i} {name} → {on if ok else off}"
         return head
 
-    def summary(self, step: int, limit: int = 12) -> str:
-        """Per-object state summary, interacted-with objects first."""
+    def summary(self, step: int, limit: int = 12,
+                relevant: Optional[set] = None) -> str:
+        """Per-object state summary, interacted-with objects first.
+
+        ``relevant`` narrows the dump to the objects this task actually
+        mentions (plus whatever was interacted with): a state dump that lists
+        every mug and statue the WM ever saw is mostly noise, and the point of
+        this block is to let the model check the task's own objects before it
+        says DONE.  ``LIGHTWM_STATE_SCOPE=all`` restores the full dump.
+        """
         lines = ["**WM 物体状态汇总（来自 WM 自己的检测与画面变化判断，可能有错）**"]
-        if not self.seen:
+        seen = dict(self.seen)
+        if relevant is not None:
+            scope = os.environ.get("LIGHTWM_STATE_SCOPE", "relevant").lower()
+            if scope != "all":
+                keep = {t for t in seen if t in relevant or t in self.acts}
+                if self.held:
+                    keep.add(str(self.held))
+                seen = {t: seen[t] for t in keep}
+        if not seen:
             lines.append("- WM 还没有记住任何物体")
         else:
-            acted = [t for t in self.acts if t in self.seen]
-            rest = [t for t in self.seen if t not in acted]
-            rest.sort(key=lambda t: -int(self.seen[t].get("last_seen_step") or 0))
+            acted = [t for t in self.acts if t in seen]
+            rest = [t for t in seen if t not in acted]
+            rest.sort(key=lambda t: -int(seen[t].get("last_seen_step") or 0))
             shown = (acted + rest)[:limit]
             for otype in shown:
-                lines.append("- " + self._entry_line(otype, self.seen[otype]))
-            hidden = len(self.seen) - len(shown)
+                lines.append("- " + self._entry_line(otype, seen[otype]))
+            hidden = len(seen) - len(shown)
             if hidden > 0:
                 lines.append(f"- （另有 {hidden} 个 WM 记得的物体未列出）")
         lines.append(f"- 手持：{self.held or '空手'}")
@@ -221,7 +238,9 @@ def render_block(state: Dict, step: int) -> str:
     if mem is None:
         return ""
     if state.pop("_summary_pending", False):
-        return (mem.summary(step)
+        # 只汇总任务相关（+ 交互过 + 手持）的物体；没开目标提示时保持旧的全量。
+        relevant = state.get("_wm_relevant_types")
+        return (mem.summary(step, relevant=relevant)
                 + "\n你可以据此判断任务是否已经完成：确认完成就输出 DONE，"
                   "否则继续下一步动作。")
     return ""
