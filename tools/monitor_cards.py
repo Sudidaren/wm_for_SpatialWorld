@@ -31,8 +31,8 @@ LOG = Path("/mnt/d/lightwm_out/cards_monitor.log")
 
 PROBE = r"""
 echo -n "vllm=";    (curl -sf -m 6 http://127.0.0.1:8000/v1/models >/dev/null && echo up || echo down)
-echo -n "orch=";    (pgrep -f "[c]loud_orchestrator" >/dev/null && echo up || echo down)
-echo -n "wd=";      (pgrep -f "[c]ard_watchdog" >/dev/null && echo up || echo down)
+echo -n "orch=";    (ps -eo pid=,args= | awk '/cloud_orchestrator_v4\.sh [a-z0-9]/{print $1; exit}' | grep -q . && echo up || echo down)
+echo -n "wd=";      (if [ -f /root/watchdog.pid ] && kill -0 "$(cat /root/watchdog.pid)" 2>/dev/null; then echo up; else echo down; fi)
 echo -n "ka=";      (if [ -f /root/keepalive.pid ] && kill -0 "$(cat /root/keepalive.pid)" 2>/dev/null; then echo up; else echo down; fi)
 echo -n "xvfb=";    (pgrep -f "[X]vfb :99" >/dev/null && echo up || echo down)
 echo -n "sup=";     python3 - <<'PYEOF' 2>/dev/null || echo none

@@ -44,11 +44,27 @@ PIP = ("ai2thor==5.0.0", "rfdetr", "supervision", "opencv-python-headless",
 #: proves the display, the build and the package all agree.  This is the check
 #: that would have caught the Xvfb outage before it burned 229 tasks.
 SMOKE = """
-set -e
-export DISPLAY=:99
-pgrep -f "[X]vfb :99" >/dev/null || (setsid nohup Xvfb :99 -screen 0 1280x1024x24 \
-  > /root/autodl-tmp/logs/xvfb.log 2>&1 < /dev/null &)
-sleep 3
+set -u
+export DISPLAY="${DISPLAY:-:99}"
+mkdir -p /root/autodl-tmp/logs
+# Ask the display whether it works instead of grepping for the process: this
+# script travels as one shell command line, so a pgrep pattern finds its own
+# text and the Xvfb start never happens (that is what failed here twice).
+if ! xdpyinfo >/dev/null 2>&1; then
+  setsid nohup Xvfb "$DISPLAY" -screen 0 1280x1024x24 \
+    > /root/autodl-tmp/logs/xvfb.log 2>&1 < /dev/null &
+  for _ in $(seq 1 20); do
+    xdpyinfo >/dev/null 2>&1 && break
+    sleep 1
+  done
+fi
+if xdpyinfo >/dev/null 2>&1; then
+  echo "display ok on $DISPLAY"
+else
+  echo "display BAD on $DISPLAY"
+  tail -5 /root/autodl-tmp/logs/xvfb.log 2>/dev/null
+  exit 1
+fi
 VENV=/home/sudidaren/SpatialWorld/envs/ai2thor/.venv
 [ -x "$VENV/bin/python" ] || /root/miniconda3/bin/python -m venv --system-site-packages "$VENV"
 $VENV/bin/python - <<'PY'
@@ -141,10 +157,12 @@ def build_tars(payload: Path, rebuild: bool = False) -> None:
           "lightwm_phases/checkpoints/rfdetr_small_228094",
           "lightwm_phases/checkpoints/small_objects_20260910",
           "lightwm_phases/checkpoints/da2_metric_indoor_small"]),
-        ("spatialworld.tar",
-         ["SpatialWorld/data", "SpatialWorld/mllm_base_agent",
-          "SpatialWorld/evaluation", "SpatialWorld/experiments",
-          "SpatialWorld/tests"]),
+        # the whole tree, not a hand-picked subset: the workers start with
+        # `python -m scripts.ai2thor.work.run_task`, so leaving SpatialWorld/
+        # scripts out makes every task fail with "No module named 'scripts'"
+        # while everything else looks installed.  Only the venv is excluded --
+        # it is 0.5 GB and is recreated on the card anyway.
+        ("spatialworld.tar", ["SpatialWorld"]),
         ("spatialworld_eval.tar",
          ["spatialworld_eval"]),
         ("code_only.tar",
@@ -167,6 +185,8 @@ def build_tars(payload: Path, rebuild: bool = False) -> None:
         excl = "--exclude='__pycache__' --exclude='*.pyc'"
         if name == "spatialworld_eval.tar":
             excl += " --exclude='runs'"
+        if name == "spatialworld.tar":
+            excl += " --exclude='SpatialWorld/envs/*/.venv' --exclude='SpatialWorld/envs/*/.venv/**'"
         print(f"    building {name} ...", flush=True)
         local(f"cd {LAYOUT} && tar cf {tmp_of(out)} {excl} {' '.join(present)}")
         if not Path(tmp_of(out)).exists():
@@ -215,6 +235,11 @@ def provision(target: str, payload: Path, with_ai2thor: bool, me: str) -> bool:
 
         sftp.close()
         print("    extracting ...", flush=True)
+        # spatialworld_eval/runs is a symlink to this directory; without it the
+        # harness dies on Path.mkdir with FileExistsError (a dangling symlink
+        # is not a directory), which is how two freshly provisioned cards
+        # failed every launch for ten minutes.
+        sh(c, "mkdir -p /root/autodl-tmp/runs_local /root/autodl-tmp/logs")
         print(sh(c, f"cd {LAYOUT} && " +
                  " && ".join(f"tar xf {REMOTE_TMP}/{t}" for t in TARS
                              if (payload / t).exists()) +

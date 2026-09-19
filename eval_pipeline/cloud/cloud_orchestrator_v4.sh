@@ -22,6 +22,21 @@
 set -u
 cd /home/sudidaren/spatialworld_eval || exit 1
 
+# A pidfile: every process-finding command in this harness has to avoid
+# matching its own command line, and a script that mentions
+# "cloud_orchestrator_v4.sh" matches a pgrep for it.  A pid has no such
+# problem, and the refresh path (tools/card_ctl.py) needs to know which
+# process to restart.
+PIDFILE="${PIDFILE:-/root/orchestrator.pid}"
+echo $$ > "$PIDFILE"
+trap 'rm -f "$PIDFILE"' EXIT
+
+# 找到"真的在跑编排器"的进程：命令行里 `cloud_orchestrator_v4.sh ` 之后紧跟
+# 队列表述。用 awk 正则而不是 pgrep，任何提到脚本名的命令都不会匹配自己。
+orchestrator_pids() {
+  ps -eo pid=,args= | awk '/cloud_orchestrator_v4\.sh [a-z0-9]/{print $1}'
+}
+
 RUNS_DIR="${RUNS_DIR:-/root/autodl-tmp/runs_local}"
 LOG="${ORCH_LOG:-/root/orchestrator_v2.log}"
 IDLE_LIMIT="${IDLE_LIMIT:-900}"
@@ -73,9 +88,15 @@ print(n)
 ' "$f" "$MAX_TRIES" 2>/dev/null || echo 0
 }
 
+# 哪一个是 supervisor。RUN_NAME 会被 worker 继承，所以只看环境变量会把
+# worker 认成 supervisor：2026-09-19 卡 D 上 supervisor 被误杀后，编排器每轮
+# 都看见"运行中"，整批就停在那里不再补进程。worker 的命令行里有 run_task，
+# supervisor 没有，用这一点区分。
 sup_pid() {
-  local p
+  local p cmd
   for p in $(pgrep -f "[p]ython -u -" 2>/dev/null); do
+    cmd=$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null)
+    case "$cmd" in *run_task*) continue;; esac
     if tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -q "^RUN_NAME=$1$"; then
       echo "$p"; return 0
     fi

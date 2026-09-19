@@ -43,18 +43,32 @@ else
     curl -sf -m 6 "http://127.0.0.1:$VLLM_PORT/v1/models" >/dev/null 2>&1 && break
     sleep 10
   done
-  curl -sf -m 6 "http://127.0.0.1:$VLLM_PORT/v1/models" >/dev/null 2>&1 \
-    && echo "   vLLM ready" || echo "   vLLM NOT ready (tail $LOGDIR/vllm.log)"
+  if curl -sf -m 6 "http://127.0.0.1:$VLLM_PORT/v1/models" >/dev/null 2>&1; then
+    echo "   vLLM ready"
+  else
+    # Do not start an arm here: every task would call an endpoint that is not
+    # there, and the harness records that as a model failure -- a full batch
+    # of failed_model with a perfectly healthy-looking card.
+    echo "   vLLM NOT ready -> not starting the arm (tail $LOGDIR/vllm.log)"
+    tail -5 "$LOGDIR/vllm.log" 2>/dev/null | sed 's/^/     /'
+    exit 1
+  fi
 fi
 
 echo "== [3/4] watchdog =="
-if ! pgrep -f "[c]ard_watchdog.sh" >/dev/null; then
+if [ -f /root/watchdog.pid ] && kill -0 "$(cat /root/watchdog.pid)" 2>/dev/null; then
+  echo "   already running (pid $(cat /root/watchdog.pid))"
+else
   setsid nohup env RUN_NAME="" INTERVAL=60 bash \
     /home/sudidaren/lightwm_phases/tools/card_watchdog.sh \
     > "$LOGDIR/watchdog.boot.log" 2>&1 < /dev/null &
   sleep 2
 fi
-pgrep -f "[c]ard_watchdog.sh" >/dev/null && echo "   watchdog ok" || echo "   watchdog FAILED"
+if [ -f /root/watchdog.pid ] && kill -0 "$(cat /root/watchdog.pid)" 2>/dev/null; then
+  echo "   watchdog ok (pid $(cat /root/watchdog.pid))"
+else
+  echo "   watchdog FAILED"
+fi
 
 echo "== [4/4] arm queue =="
 if pgrep -f "[c]loud_orchestrator_v4" >/dev/null 2>&1; then

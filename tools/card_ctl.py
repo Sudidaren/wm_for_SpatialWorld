@@ -30,6 +30,24 @@ from card_ssh import CARDS, connect, run  # noqa: PLC2701 - sibling tool
 
 KEEPALIVE = "/home/sudidaren/lightwm_phases/tools/card_keepalive.sh"
 ARM_LAUNCH = "/root/arm_launch.sh"
+ORCH_SRC = Path(__file__).resolve().parents[2] / "spatialworld_eval/cloud_orchestrator_v4.sh"
+ORCH_DST = "/home/sudidaren/spatialworld_eval/cloud_orchestrator_v4.sh"
+
+
+def push_tools(sftp) -> None:
+    """Ship the current control scripts to the card.
+
+    These live outside the tarball payload, so a card provisioned yesterday
+    would otherwise keep running yesterday's watchdog -- and today's bugs
+    (a watchdog that kills supervisors, an orchestrator that cannot tell a
+    worker from a supervisor) were exactly that.
+    """
+    here = Path(__file__).resolve().parent
+    for tool in ("card_watchdog.sh", "card_run_queue.sh"):
+        sftp.put(str(here / tool), f"/home/sudidaren/lightwm_phases/tools/{tool}")
+    sftp.put(str(here / "card_keepalive.sh"), KEEPALIVE)
+    if ORCH_SRC.exists():
+        sftp.put(str(ORCH_SRC), ORCH_DST)
 
 
 def sh(parts: list[str]) -> str:
@@ -82,12 +100,12 @@ def stop_helpers(tag: str, kill_orchestrator: bool) -> str:
     if kill_orchestrator:
         lines += [
             'echo "--- stop orchestrator ---"',
-            'for p in $(pgrep -f "[c]loud_orchestrator_v4"); do echo "  orchestrator pid=$p"; '
-            'kill -TERM "$p" 2>/dev/null; done',
+            "ORCH=$(ps -eo pid=,args= | awk '/cloud_orchestrator_v4\\.sh [a-z0-9]/{print $1}')",
+            'for p in $ORCH; do echo "  orchestrator pid=$p"; kill -TERM "$p" 2>/dev/null; done',
         ]
     lines += [
         "sleep 3",
-        'for p in $(pgrep -f "[c]loud_orchestrator_v4"); do kill -9 "$p" 2>/dev/null; done',
+        'for p in ${ORCH:-}; do kill -9 "$p" 2>/dev/null; done',
         'for p in $(pgrep -f "[c]ard_watchdog.sh"); do kill -9 "$p" 2>/dev/null; done',
         'echo "--- reap orphaned workers/unity ---"',
         'for p in $(pgrep -f "[r]un_task" 2>/dev/null); do',
@@ -137,9 +155,96 @@ def ensure_keepalive(tag: str) -> str:
         "  setsid nohup env LAUNCH=" + ARM_LAUNCH + " INTERVAL=90 MAX_RESTARTS=12 \\",
         "    bash " + KEEPALIVE + " > /root/autodl-tmp/logs/keepalive.boot.log 2>&1 < /dev/null &",
         "  sleep 2",
-        '  pgrep -f "[c]ard_keepalive.sh" >/dev/null && echo "keepalive started" || echo "keepalive FAILED"',
+        '  if [ -f /root/keepalive.pid ] && kill -0 "$(cat /root/keepalive.pid)" 2>/dev/null; then',
+        '    echo "keepalive started (pid $(cat /root/keepalive.pid))"',
+        "  else",
+        '    echo "keepalive FAILED"',
+        "  fi",
         "fi",
         'echo "--- keepalive log ---"; tail -3 /root/autodl-tmp/logs/keepalive.log 2>/dev/null || echo none',
+    ])
+
+
+def smoke(tag: str) -> str:
+    """The one check that would have caught the outage: run a real scene.
+
+    Importing ai2thor is not enough -- the Linux64 build needs a live X11
+    display with GLX, and a card without one fails every task in ~2 s while
+    looking perfectly healthy from the outside.
+    """
+    lines = [
+        "set -u",
+        'export DISPLAY="${DISPLAY:-:99}"',
+        "mkdir -p /root/autodl-tmp/logs",
+        "if ! xdpyinfo >/dev/null 2>&1; then",
+        '  setsid nohup Xvfb "$DISPLAY" -screen 0 1280x1024x24 '
+        "> /root/autodl-tmp/logs/xvfb.log 2>&1 < /dev/null &",
+        "  for _ in $(seq 1 20); do xdpyinfo >/dev/null 2>&1 && break; sleep 1; done",
+        "fi",
+        'xdpyinfo >/dev/null 2>&1 && echo "display ok" || echo "display BAD"',
+        'VENV=/home/sudidaren/SpatialWorld/envs/ai2thor/.venv',
+        '[ -x "$VENV/bin/python" ] || /root/miniconda3/bin/python -m venv '
+        '--system-site-packages "$VENV"',
+        '"$VENV/bin/python" - <<\'PY\'',
+        "import ai2thor, time",
+        "from ai2thor.controller import Controller",
+        'print("ai2thor", ai2thor.__version__)',
+        "t0 = time.time()",
+        'c = Controller(scene="FloorPlan1", platform="Linux64", width=300, height=300,',
+        "               server_timeout=300.0, start_unity_process=True)",
+        'print("controller up in %.1fs" % (time.time() - t0))',
+        'ev = c.step("Pass")',
+        'print("frame ok:", ev.frame.shape)',
+        "c.stop()",
+        "PY",
+    ]
+    return "\n".join(lines)
+
+
+def restart_watchdog(tag: str, interval: int) -> str:
+    return "\n".join([
+        "set -u",
+        'export DISPLAY="${DISPLAY:-:99}"',
+        "mkdir -p /root/autodl-tmp/logs",
+        'OLD=$(ps -eo pid,args | awk \'/[c]ard_watchdog\\.sh/{print $1}\' | head -1)',
+        'if [ -n "${OLD:-}" ]; then echo "stopping old watchdog pid=$OLD"; '
+        'kill -TERM "$OLD" 2>/dev/null; sleep 3; kill -9 "$OLD" 2>/dev/null; fi',
+        f'setsid nohup env RUN_NAME="" INTERVAL={interval} bash '
+        f"{KEEPALIVE.replace('card_keepalive.sh', 'card_watchdog.sh')} "
+        "> /root/autodl-tmp/logs/watchdog.boot.log 2>&1 < /dev/null &",
+        "sleep 3",
+        'if [ -f /root/watchdog.pid ] && kill -0 "$(cat /root/watchdog.pid)" 2>/dev/null; then',
+        '  echo "watchdog ok (pid $(cat /root/watchdog.pid))"',
+        "else",
+        '  echo "watchdog FAILED"; tail -5 /root/autodl-tmp/logs/watchdog.log',
+        "fi",
+        'tail -2 /root/autodl-tmp/logs/watchdog.log',
+    ])
+
+
+def refresh_orchestrator(tag: str) -> str:
+    """Replace the orchestrator script and restart just that process.
+
+    The arm keeps running: ensure_batch() leaves a live supervisor alone, so
+    this is a control-plane restart and costs nothing.  It cannot be done by
+    overwriting the file under a running orchestrator -- bash reads a script
+    incrementally, so the process has to be restarted to pick it up.
+    """
+    return "\n".join([
+        "set -u",
+        # awk with an escaped dot and a required trailing letter: this script
+        # itself names the orchestrator, so a pgrep pattern would kill the
+        # shell running this very command (it did, four times).
+        "PIDS=$(ps -eo pid=,args= | awk '/cloud_orchestrator_v4\\.sh [a-z0-9]/{print $1}')",
+        'for p in $PIDS; do echo "stop orchestrator $p"; kill -TERM "$p" 2>/dev/null; done',
+        "sleep 3",
+        'for p in $PIDS; do kill -9 "$p" 2>/dev/null; done',
+        'bash -n ' + ORCH_DST + ' && echo "orchestrator syntax ok"',
+        'if [ ! -f ' + ARM_LAUNCH + ' ]; then echo "no ' + ARM_LAUNCH + '" ; exit 1; fi',
+        "setsid nohup bash " + ARM_LAUNCH + " > /root/orch_refresh.out 2>&1 < /dev/null &",
+        "sleep 25",
+        'tail -4 /root/orchestrator_v4.log',
+        'echo "supervisor: $(pgrep -fc \'[p]ython -u - \' || true) processes"',
     ])
 
 
@@ -169,21 +274,35 @@ def launch(tag: str, arms: list[str], env_pairs: dict[str, str],
         f"echo {env_pairs.get('TOTAL', '438')} > /root/keepalive.total",
         "cat /root/keepalive.arms /root/keepalive.total",
         'echo "--- watchdog ---"',
-        'if ! pgrep -f "[c]ard_watchdog.sh" >/dev/null; then',
+        'if [ -f /root/watchdog.pid ] && kill -0 "$(cat /root/watchdog.pid)" 2>/dev/null; then',
+        '  echo "  already running (pid $(cat /root/watchdog.pid))"',
+        "else",
         '  mkdir -p /root/autodl-tmp/logs',
         f'  setsid nohup env RUN_NAME="" INTERVAL={watchdog_interval} DISPLAY="$DISPLAY" \\',
         '    bash /home/sudidaren/lightwm_phases/tools/card_watchdog.sh \\',
         '    > /root/autodl-tmp/logs/watchdog.boot.log 2>&1 < /dev/null &',
         '  sleep 3',
         'fi',
-        'pgrep -f "[c]ard_watchdog.sh" >/dev/null && echo "  watchdog ok" || echo "  watchdog FAILED"',
+        'if [ -f /root/watchdog.pid ] && kill -0 "$(cat /root/watchdog.pid)" 2>/dev/null; then',
+        '  echo "  watchdog ok (pid $(cat /root/watchdog.pid))"',
+        "else",
+        '  echo "  watchdog FAILED"',
+        "fi",
         'echo "--- keepalive ---"',
-        'if ! pgrep -f "[c]ard_keepalive.sh" >/dev/null; then',
+        # pidfile again: this script's own text contains the keepalive's path,
+        # so a pgrep here always finds itself and the keepalive never starts.
+        'if [ -f /root/keepalive.pid ] && kill -0 "$(cat /root/keepalive.pid)" 2>/dev/null; then',
+        '  echo "  already running (pid $(cat /root/keepalive.pid))"',
+        "else",
         f'  setsid nohup env LAUNCH={ARM_LAUNCH} INTERVAL=90 MAX_RESTARTS=12 \\',
         f'    bash {KEEPALIVE} > /root/autodl-tmp/logs/keepalive.boot.log 2>&1 < /dev/null &',
         '  sleep 2',
         'fi',
-        'pgrep -f "[c]ard_keepalive.sh" >/dev/null && echo "  keepalive ok" || echo "  keepalive FAILED"',
+        'if [ -f /root/keepalive.pid ] && kill -0 "$(cat /root/keepalive.pid)" 2>/dev/null; then',
+        '  echo "  keepalive ok (pid $(cat /root/keepalive.pid))"',
+        "else",
+        '  echo "  keepalive FAILED"',
+        "fi",
         'echo "--- queue ---"',
         f'bash {ARM_LAUNCH}',
     ]
@@ -206,7 +325,8 @@ def arm_launch_text(arms: list[str], env_pairs: dict[str, str]) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("action",
-                    choices=["probe", "stop", "launch", "stop-helpers", "ensure-keepalive"])
+                    choices=["probe", "stop", "launch", "stop-helpers", "ensure-keepalive",
+                             "smoke", "restart-watchdog", "refresh-orchestrator"])
     ap.add_argument("card")
     ap.add_argument("--run", help="run name (stop)")
     ap.add_argument("--arm", action="append", default=[],
@@ -216,6 +336,8 @@ def main() -> int:
     ap.add_argument("--scenes", default=None)
     ap.add_argument("--total", default=None)
     ap.add_argument("--archive", default=None, help="run dir name to move aside first")
+    ap.add_argument("--env", action="append", default=[],
+                    help="extra KEY=VALUE in the arm's environment (repeatable)")
     ap.add_argument("--watchdog-interval", type=int, default=30)
     ap.add_argument("--keep-orchestrator", action="store_true",
                     help="stop: leave the orchestrator alive (it will restart the arm)")
@@ -226,6 +348,27 @@ def main() -> int:
 
     if args.action == "probe":
         script = probes(args.card)
+    elif args.action == "smoke":
+        script = smoke(args.card)
+    elif args.action == "restart-watchdog":
+        c = connect(args.card)
+        try:
+            sftp = c.open_sftp()
+            sftp.put(str(Path(__file__).with_name("card_watchdog.sh")),
+                     "/home/sudidaren/lightwm_phases/tools/card_watchdog.sh")
+            sftp.close()
+        finally:
+            c.close()
+        script = restart_watchdog(args.card, args.watchdog_interval)
+    elif args.action == "refresh-orchestrator":
+        c = connect(args.card)
+        try:
+            sftp = c.open_sftp()
+            push_tools(sftp)
+            sftp.close()
+        finally:
+            c.close()
+        script = refresh_orchestrator(args.card)
     elif args.action == "ensure-keepalive":
         if not args.arm:
             ap.error("ensure-keepalive needs the --arm list the keepalive should re-run")
@@ -238,6 +381,15 @@ def main() -> int:
             env_pairs["SCENES"] = args.scenes
         if args.total:
             env_pairs["TOTAL"] = args.total
+        for kv in args.env:
+            k, _, v = kv.partition("=")
+            if k:
+                env_pairs[k] = v
+        if "VLLM_NAME" in env_pairs and "WAIT_MODEL" not in env_pairs:
+            # the orchestrator refuses to start a stage until this model is
+            # actually being served, so a slow vLLM cannot turn a batch into
+            # 311 model failures
+            env_pairs["WAIT_MODEL"] = env_pairs["VLLM_NAME"]
         c = connect(args.card)
         try:
             sftp = c.open_sftp()
@@ -271,12 +423,16 @@ def main() -> int:
         if args.total:
             env_pairs["TOTAL"] = args.total
         env_pairs["RUNS_DIR"] = "/root/autodl-tmp/runs_local"
+        for kv in args.env:
+            k, _, v = kv.partition("=")
+            if k:
+                env_pairs[k] = v
         # the keepalive needs the relaunch script and the keepalive itself on
         # the card *before* the boot script starts them
         c = connect(args.card)
         try:
             sftp = c.open_sftp()
-            sftp.put(str(Path(__file__).with_name("card_keepalive.sh")), KEEPALIVE)
+            push_tools(sftp)
             with sftp.open(ARM_LAUNCH, "w") as fh:
                 fh.write(arm_launch_text(args.arm, env_pairs))
             sftp.close()

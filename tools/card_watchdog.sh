@@ -25,6 +25,13 @@ exec >> "$LOG" 2>&1
 
 log() { echo "[$(date '+%F %T')] $*"; }
 
+# A pidfile, because every pgrep pattern for "this script" also matches the
+# command line of whoever is grepping -- that has silently disabled checks
+# three times today.  A pid is unambiguous.
+PIDFILE="${PIDFILE:-/root/watchdog.pid}"
+echo $$ > "$PIDFILE"
+trap 'rm -f "$PIDFILE"' EXIT
+
 log "watchdog start (arm=${RUN_NAME:-<none>} interval=${INTERVAL}s pid=$$)"
 
 prev_zombie=0
@@ -95,7 +102,29 @@ while true; do
   mem_avail=$(free -g | awk '/^Mem:/{print $7}')
   gpu_mem=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1)
   log "ok zombies=$zombies mem_avail=${mem_avail}G gpu_used=${gpu_mem:-?}M procs=$(pgrep -fc '[p]ython -u -' || true)"
-  [ "$mem_avail" -lt 20 ] && log "WARNING: available RAM ${mem_avail}G"
+  if [ "$mem_avail" -lt 20 ]; then
+    log "WARNING: available RAM ${mem_avail}G"
+  fi
+  # -- memory floor -------------------------------------------------------
+  # The box dying is worse than a retried task: an OOM kill takes the
+  # supervisor with it and leaves orphans holding simulators.  Below the
+  # floor, drop the *newest* worker (the one that has done the least), whose
+  # task the supervisor records as an external failure and retries.  One per
+  # cycle, so the floor is approached slowly and never as a cull.
+  if [ "$mem_avail" -lt 8 ]; then
+    # newest = smallest elapsed time
+    victim=$(for p in $(pgrep -f "[r]un_task" 2>/dev/null); do
+               et=$(ps -o etimes= -p "$p" 2>/dev/null | tr -d ' ')
+               [ -n "$et" ] && echo "$et $p"
+             done | sort -n | head -1 | awk '{print $2}')
+    if [ -n "$victim" ]; then
+      log "EMERGENCY mem_avail=${mem_avail}G -> stop newest worker pid=$victim"
+      for c in $(pgrep -P "$victim" 2>/dev/null); do kill -9 "$c" 2>/dev/null; done
+      kill -9 "$victim" 2>/dev/null
+      sleep 5
+      log "  after kill: mem_avail=$(free -g | awk '/^Mem:/{print $7}')G"
+    fi
+  fi
   prev_zombie=$zombies
   sleep "$INTERVAL"
 done

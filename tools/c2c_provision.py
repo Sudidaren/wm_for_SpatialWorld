@@ -37,14 +37,23 @@ def stream(c, cmd: str) -> int:
     q: queue.Queue[bytes | None] = queue.Queue()
 
     def pump() -> None:
+        # Read both streams: a traceback on the remote side otherwise looks
+        # like a silent stop, which is how a failed card-to-card copy
+        # presented itself for twenty minutes.
         while True:
-            if chan.recv_ready():
+            got = False
+            while chan.recv_ready():
                 q.put(chan.recv(65536))
-            elif chan.exit_status_ready() and not chan.recv_ready():
+                got = True
+            while chan.recv_stderr_ready():
+                q.put(chan.recv_stderr(65536))
+                got = True
+            if got:
+                continue
+            if chan.exit_status_ready():
                 q.put(None)
                 return
-            else:
-                time.sleep(0.2)
+            time.sleep(0.2)
 
     t = threading.Thread(target=pump, daemon=True)
     t.start()

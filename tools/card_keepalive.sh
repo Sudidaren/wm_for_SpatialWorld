@@ -41,7 +41,9 @@ while true; do
     log "no launch script at $LAUNCH -> stop"
     exit 0
   fi
-  if pgrep -f "[c]loud_orchestrator_v4" >/dev/null 2>&1; then
+  # awk, not pgrep: this script names the orchestrator script, so a pattern
+  # match would find itself.
+  if [ -n "$(ps -eo pid=,args= | awk '/cloud_orchestrator_v4\.sh [a-z0-9]/{print $1}')" ]; then
     continue
   fi
 
@@ -92,7 +94,7 @@ PY
   log "orchestrator missing, $still_open run dir(s) unfinished -> restart #$restarts"
   setsid nohup bash "$LAUNCH" > /root/orch_keepalive.out 2>&1 < /dev/null &
   sleep 20
-  if pgrep -f "[c]loud_orchestrator_v4" >/dev/null 2>&1; then
+  if [ -n "$(ps -eo pid=,args= | awk '/cloud_orchestrator_v4\.sh [a-z0-9]/{print $1}')" ]; then
     log "  restart #$restarts ok"
   else
     log "  restart #$restarts did not come up (see /root/orch_keepalive.out)"
