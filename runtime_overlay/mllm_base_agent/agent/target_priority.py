@@ -15,7 +15,12 @@ The rule now is:
   3. once an object has been recognised it stays relevant for the rest of the
      episode, even after it leaves the view (that is what makes the memory
      useful);
-  4. everything else (tiers, quotas, "only memory", pose-triggered refresh,
+  4. an object the agent has already acted on counts as relevant too: its own
+     action stream is evidence the task is about that object, and it is the
+     only signal that reaches the "slice all the vegetables" tasks, whose
+     instruction names no object at all (``LIGHTWM_TARGET_FROM_ACTION=0``
+     turns this off);
+  5. everything else (tiers, quotas, "only memory", pose-triggered refresh,
      distance/sigma caps, predicate demotion) is unchanged.
 
 ``LIGHTWM_TARGET_MODE=llm`` restores the previous behaviour (ask the VLM to
@@ -35,11 +40,35 @@ import os
 import re
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
+try:
+    from . import state_variants
+except ImportError:                      # script / flat import fallback
+    import state_variants
+
 _DIRECTIONS = ("正前方", "右前方", "正右方", "右后方",
                "正后方", "左后方", "正左方", "左前方")
 
 #: destination verb, for the "put A into B" settled test (no object names)
 _DEST_VERB = r"(?:put|place|move|set|leave|bring|carry|throw|toss|transfer)"
+
+#: Every interaction action the environment accepts.  Used by "whatever the
+#: agent acts on is relevant by construction"; navigation is not in here.
+#: These are action *verbs* -- they appear with this exact spelling in the
+#: system prompt every arm receives -- so they are API vocabulary, not a
+#: table of object names.
+_INTERACTION_ACTIONS = frozenset({
+    "OpenObject", "CloseObject", "ToggleObjectOn", "ToggleObjectOff",
+    "PickupObject", "SliceObject", "BreakObject", "CookObject",
+    "DirtyObject", "CleanObject", "FillObjectWithLiquid",
+    "EmptyLiquidFromObject", "UseUpObject",
+})
+#: A ``PutObject(X)`` names the *destination*, not the object the agent
+#: decided to act on: the object itself was already counted at pickup, and the
+#: destination is a place the agent is standing in front of.  Measured on the
+#: 311 AI2-THOR traces, dropping it removes 0.02 wrong targets per task and
+#: costs 0.01 right ones.  (``DropHandObject``/``ThrowObject`` are not in the
+#: list above either, so they add nothing.)
+_DESTINATION_ONLY_ACTIONS = frozenset({"PutObject"})
 
 #: The agent-facing prompt for the one-shot extraction.  v2 (2026-09-16).
 #:
@@ -252,6 +281,11 @@ class TargetHinter:
         #: LIGHTWM_HINT_VISIBLE_ALL=1 恢复旧行为。
         self.visible_all = bool(visible_all if visible_all is not None
                                 else os.environ.get("LIGHTWM_HINT_VISIBLE_ALL", "0") == "1")
+        #: 2026-09-19：模型已经对某个物体下过手（PickupObject / SliceObject /
+        #: OpenObject ...），那它就是任务相关物体——这个信号完全来自模型自己
+        #: 的输出，不需要真值、不需要词表。开关 LIGHTWM_TARGET_FROM_ACTION=0
+        #: 关掉它，用于消融"相关集只由指令文本决定"这一版本。
+        self.from_action = os.environ.get("LIGHTWM_TARGET_FROM_ACTION", "1") != "0"
         #: Types recognised so far.  Once an object is task-relevant it stays
         #: relevant -- that persistence is the whole point of the memory.
         self._relevant: Set[str] = set()
@@ -294,6 +328,37 @@ class TargetHinter:
         else:
             self._relevant |= relevant_types(self.task_desc, detected)
         return set(self._relevant)
+
+    def acted_on(self, detected: Iterable[str],
+                 acts: Dict[str, Tuple[int, str, Optional[bool]]]) -> Set[str]:
+        """Detected types the agent has already issued an interaction on.
+
+        The agent's own action stream says which object the task is about far
+        more reliably than the instruction's wording does: "slice all the
+        vegetables" names no object at all, and the agent still reaches for
+        the Lettuce.  Names are grounded against the slots the world model
+        actually perceived (through the prompt's own rename rule, so
+        ``PickupObject(LettuceSliced)`` attributes to the ``Lettuce`` slot),
+        so an invented name cannot create a hint line out of nothing.
+        """
+        out: Set[str] = set()
+        if not self.from_action:
+            return out
+        have = {str(t) for t in detected}
+        for target, value in (acts or {}).items():
+            action = str(value[1]) if len(value) > 1 else ""
+            if action in _DESTINATION_ONLY_ACTIONS:
+                continue
+            if action not in _INTERACTION_ACTIONS:
+                continue
+            name = str(target)
+            if name in have:
+                out.add(name)
+                continue
+            base = state_variants.base_of(name)
+            if base in have:
+                out.add(base)
+        return out
 
     def nearest(self, wm_metadata: Dict, visible: Optional[bool] = None
                 ) -> Optional[Tuple[str, float, str]]:
@@ -391,6 +456,9 @@ class TargetHinter:
         # 任务相关物体：exact 模式下就是"指令里点了名、而且被检测到"的那些，
         # 识别过一次就永久保留（规则 3）。
         relevance = self.relevant(list(by_type))
+        # 模型自己下过手的物体也算相关（见 acted_on 的说明）。永久保留。
+        self._relevant |= self.acted_on(list(by_type), acts)
+        relevance |= self._relevant
         wanted: Set[str] = {t for t in relevance if t in by_type}
         entries: List[Tuple[str, str]] = (self.entries() if self.mode == "llm"
                                           else [(t, t) for t in sorted(wanted)])
@@ -493,13 +561,19 @@ class TargetHinter:
         nav_best: Optional[Tuple[float, int]] = None      # (距离, 行号)
         for row in chosen:
             tp = row["type"]
-            label = f"{tp}（{TIER_LABEL[row['tier']]}"
-            if row["acts"]:
-                label += "；已交互"
-            label += "）"
             obj = row["obj"]
             if not obj:
                 continue
+            # 报给模型的名字：环境改名后（切/打碎）必须用新名字，否则它下一
+            # 步的输出会指向一个已经不存在的类型名。匹配仍用 objectType。
+            shown = str(obj.get("objectTypeDisplay") or tp)
+            label = f"{shown}（{TIER_LABEL[row['tier']]}"
+            if row["acts"]:
+                label += "；已交互"
+            word = state_variants.state_word(obj.get("state"))
+            if word:
+                label += f"；{word}"
+            label += "）"
             dist = obj.get("distance")
             sigma = obj.get("sigma")
             pos = obj.get("position") or {}
@@ -549,13 +623,14 @@ class TargetHinter:
                 continue
             if not self.visible_all and tp not in wanted:
                 continue                    # 只报任务相关物体
+            shown = str(obj.get("objectTypeDisplay") or tp)
             pos = obj.get("position") or {}
             word = ""
             if ax is not None and az is not None and pos.get("x") is not None:
                 word = direction_word(float(pos["x"]) - float(ax),
                                       float(pos.get("z") or 0.0) - float(az), yaw)
             dist = float(obj.get("distance") or 0.0)
-            names_line.append(f"{tp}（{word}约 {dist:.1f}m）" if word else tp)
+            names_line.append(f"{shown}（{word}约 {dist:.1f}m）" if word else shown)
             if len(names_line) >= self.names_limit:
                 break
 

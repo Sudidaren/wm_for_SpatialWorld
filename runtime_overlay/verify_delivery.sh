@@ -104,6 +104,7 @@ run_suite "4/6 information isolation + functional smoke" "tests/test_wm_delivery
 run_suite "5/6 object state check (CheckState)"          "tests/test_object_query.py"
 run_suite "5/6 object state check, agent loop"           "tests/test_object_query_loop.py"
 run_suite "5/6 target hint (no vocabulary)"              "tests/test_target_priority.py"
+run_suite "5/6 state variants (sliced/cracked rename)"   "tests/test_state_variants.py"
 
 # ------------------------------------------------------------- 6. summary
 step "6/6 summary"

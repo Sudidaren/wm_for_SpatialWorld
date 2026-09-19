@@ -29,6 +29,11 @@ try:                                     # package import (normal case)
 except ImportError:                      # script / flat import fallback
     from self_observation import MOVE_ACTIONS
 
+try:
+    from . import state_variants
+except ImportError:                      # script / flat import fallback
+    import state_variants
+
 
 #: AI2-THOR default camera height above the agent's body root.  The agent
 #: never changes height (no vertical movement), so this is a constant, not
@@ -155,6 +160,11 @@ class WorldModel:
         self._holding: Optional[str] = None
         self._contents: Dict[str, set] = {}  # container oid -> {oid}
         self._states: Dict[str, dict] = {}  # oid -> {state_field: bool}
+        #: The state-variant spelling the agent itself used for a base type
+        #: (``Lettuce`` -> ``LettuceSliced``).  The environment renames an
+        #: object when it is sliced, and the agent must use the new name in
+        #: its next action, so the hint repeats that spelling back.
+        self._variants: Dict[str, str] = {}
         self._visited: set = set()               # agent cells (walkable)
         self._pose: Optional[List[float]] = None  # [x, y, z, yaw] self-built
         #: AI2-THOR cameraHorizon in degrees (positive = looking down).
@@ -847,6 +857,43 @@ class WorldModel:
     #: a detection box closer than this to the image border counts as clipped
     EDGE_CLIP_PX = 5.0
 
+    # -- naming of state variants ------------------------------------------
+    def _matches_slot_type(self, slot_type: str, action_type: str) -> bool:
+        """Does an action target name this slot?
+
+        The environment renames an object once it is sliced (``Lettuce`` ->
+        ``LettuceSliced``) and the agent then acts on the new name, while the
+        perception head keeps labelling it ``Lettuce``.  Both spellings are
+        the same object, so both have to match the same slot.  The rename
+        rule is parsed from the prompt every arm receives (``state_variants``
+        reads "SliceObject(X) produces XSliced"), so this adds no vocabulary.
+        """
+        if str(slot_type) == str(action_type):
+            return True
+        base = state_variants.base_of(action_type)
+        return bool(base) and base != str(action_type) and base == str(slot_type)
+
+    def _slots_of_type(self, action_type: str,
+                       visible_ids: Optional[set] = None) -> List[str]:
+        """Slot ids an action target addresses, newest state knowledge last."""
+        out = []
+        for oid, slot in self._slots.items():
+            if not self._matches_slot_type(slot["type"], action_type):
+                continue
+            if visible_ids is not None and oid not in visible_ids:
+                continue
+            out.append(oid)
+        return out
+
+    def _remember_variant(self, action_type: str) -> None:
+        """Keep the agent's own spelling of a state variant.
+
+        Called only when the action was attributed to a slot we already have,
+        so a hallucinated name cannot introduce a variant that does not exist.
+        """
+        if state_variants.is_variant(action_type):
+            self._variants[state_variants.base_of(action_type)] = str(action_type)
+
     def _resolve_outcome(self, action_name, object_type, action_ok):
         """Drop the frame-diff verdict when the target is not fully in view.
 
@@ -860,7 +907,7 @@ class WorldModel:
                                      else "none")
         if not object_type:
             return action_ok
-        cands = [s for s in self._slots.values() if s["type"] == object_type]
+        cands = [self._slots[oid] for oid in self._slots_of_type(object_type)]
         if not cands:
             # target never perceived -> nothing visible to judge from
             self._last_outcome_source = "not_visible"
@@ -890,6 +937,14 @@ class WorldModel:
         ax = (agent_pos or {}).get("x")
         az = (agent_pos or {}).get("z")
 
+        # ---- 0) learn the environment's rename, if it used one ---------------
+        # The agent acts on "LettuceSliced" while the slot is "Lettuce"; we
+        # ground the name against a slot we already hold, so an invented name
+        # changes nothing, and a step whose frame did not change never gets
+        # here at all.
+        if object_type and self._slots_of_type(object_type):
+            self._remember_variant(object_type)
+
         # ---- 1) state actions: assume they took effect (visibility-guarded) --
         state_delta = {
             "OpenObject": ("isOpen", True),
@@ -906,17 +961,17 @@ class WorldModel:
         }
         if action_name in state_delta and object_type:
             field, value = state_delta[action_name]
-            cands = [oid for oid, s in self._slots.items()
-                     if s["type"] == object_type and oid in visible_ids]
+            cands = self._slots_of_type(object_type, visible_ids)
             if cands:
                 self._states.setdefault(cands[0], {})[field] = value
+                self._remember_variant(object_type)
 
         # ---- 2) hand state ---------------------------------------------------
         if action_name == "PickupObject" and object_type:
             nearest, best = None, 1e9
-            for oid in visible_ids:
+            for oid in self._slots_of_type(object_type, visible_ids):
                 s = self._slots.get(oid)
-                if s is None or s["type"] != object_type:
+                if s is None:
                     continue
                 if ax is None or az is None:
                     continue
@@ -926,11 +981,11 @@ class WorldModel:
             # an object held in the hand is ~0.3-0.6 m from the agent body
             if nearest is not None and best <= 0.7:
                 self._holding = nearest
+                self._remember_variant(object_type)
         elif action_name in ("PutObject", "DropHandObject", "ThrowObject"):
             if (action_name == "PutObject" and self._holding is not None
                     and object_type):
-                cands = [oid for oid, s in self._slots.items()
-                         if s["type"] == object_type and oid in visible_ids]
+                cands = self._slots_of_type(object_type, visible_ids)
                 if cands:
                     target = cands[0]
                     self._contents.setdefault(target, set()).add(self._holding)
@@ -943,6 +998,14 @@ class WorldModel:
         for oid, slot in self._slots.items():
             pos = slot["pos"]
             dist = math.hypot(pos[0] - ax, pos[2] - az) if ax is not None else 0.0
+            state = dict(self._states.get(oid) or {})
+            #: The name the *agent* has to use for this object.  The same as
+            #: ``objectType`` until the environment renames it (slicing),
+            #: after which the next action would address a name that no
+            #: longer exists unless the hint switches to the new spelling.
+            #: Matching keeps using the base ``objectType``.
+            display = state_variants.display_name(
+                slot["type"], state, self._variants.get(slot["type"]))
             inside = []
             for hid in self._contents.get(oid, ()):  # what was put inside
                 htype = self._slots.get(hid, {}).get("type")
@@ -952,6 +1015,7 @@ class WorldModel:
                 {
                     "objectId": oid,
                     "objectType": slot["type"],
+                    "objectTypeDisplay": display,
                     "position": {"x": pos[0], "y": pos[1], "z": pos[2]},
                     "visible": oid in visible_ids,
                     "distance": dist,
@@ -979,6 +1043,9 @@ class WorldModel:
                 {
                     "objectId": self._holding,
                     "objectType": _htype,
+                    "objectTypeDisplay": state_variants.display_name(
+                        _htype, self._states.get(self._holding),
+                        self._variants.get(_htype)),
                 }
             )
         return {
@@ -1023,6 +1090,7 @@ class WorldModel:
             "_holding": self._holding,
             "_contents": {k: sorted(v) for k, v in self._contents.items()},
             "_states": {k: dict(v) for k, v in self._states.items()},
+            "_variants": dict(self._variants),
             "_visited": sorted(self._visited),
             "_blocked_from_moves": sorted(self._blocked_from_moves),
             "_pose": list(self._pose) if self._pose else None,
@@ -1102,6 +1170,9 @@ class WorldModel:
         }
         wm._states = {
             k: dict(v) for k, v in (data.get("_states") or {}).items()
+        }
+        wm._variants = {
+            str(k): str(v) for k, v in (data.get("_variants") or {}).items()
         }
         wm._visited = {tuple(c) for c in data.get("_visited") or []}
         wm._pose = (

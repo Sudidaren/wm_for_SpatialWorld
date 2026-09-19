@@ -229,13 +229,19 @@ def test_wm_does_not_import_the_environment():
 def test_target_hint_has_no_object_vocabulary():
     """The object names may only come from the model, never from this file."""
     from mllm_base_agent.agent import target_priority as tp
+    from mllm_base_agent.prompts import get_system_prompt
 
     src = (AGENT_DIR / "target_priority.py").read_text(encoding="utf-8")
     # the extraction prompt legitimately shows the *format* with example tokens
     prompt = tp.EXTRACTION_PROMPT
     stripped = src.replace(prompt, "")
     tokens = re.findall(r'"([A-Z][A-Za-z]{3,})"|\'([A-Z][A-Za-z]{3,})\'', stripped)
-    names = {a or b for a, b in tokens}
+    # Action verbs are API, not object vocabulary: the shipped prompt spells
+    # them the same way ("PickupObject(Egg)", "ToggleObjectOn(...)"), so they
+    # are read out of that prompt instead of being whitelisted by hand.
+    actions = set(re.findall(r"\b([A-Z][A-Za-z]{3,})\s*\(",
+                             get_system_prompt("ai2thor")))
+    names = {a or b for a, b in tokens} - actions
     assert not names, f"object-name literals found in target_priority.py: {sorted(names)}"
 
 

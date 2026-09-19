@@ -1,4 +1,4 @@
-# runtime_overlay 文件清单（52 个）
+# runtime_overlay 文件清单（53 个）
 
 每一个文件都说明了**为什么必须随包发布**。没有无法解释的残留文件：
 `verify_delivery.sh` 的第 2 步会检查"overlay 里有没有未列进 MANIFEST 的文件"，
@@ -15,6 +15,7 @@
 | `mllm_base_agent/agent/self_observation.py` | 帧差判动作成败（MSE>1），替代模拟器 error_message | 只能退回读模拟器错误串（作弊） |
 | `mllm_base_agent/agent/target_priority.py` | 目标物位置提示（`WM_TARGET_HINT`，默认关） | 消融开关失效 |
 | `mllm_base_agent/agent/object_query.py` | `CheckState()` 完成前查状态（`WM_STATE_CHECK`，默认关） | 消融开关失效 |
+| `mllm_base_agent/agent/state_variants.py` | 加工态改名规则（`SliceObject(X)→XSliced` 等）**从模型本来就收到的系统提示词里解析**，用于把动作里的 `LettuceSliced` 归并回 WM 自己的 `Lettuce` 槽位 | 切过的物体判不出手持/成败、相关集挂不上 |
 
 ## B. 官方文件的行为修补（6 个，修补）——每一处都有非改不可的理由
 
@@ -35,16 +36,14 @@
 | `tests/test_object_query.py` | `CheckState()` 解析与汇总（7 项） |
 | `tests/test_object_query_loop.py` | 不拦 DONE、只多一次调用、协议只注入一次（9 项） |
 | `tests/test_target_priority.py` | 目标提示分层/配额/降权 + "源码里不得出现对象词表"（10 项） |
+| `tests/test_state_variants.py` | 改名规则来自提示词、变体归并到基类槽位、动作目标并入相关集、`PutObject` 目的地不并入（15 项） |
 
-## D. phase C 隐物体信念（2 个，新增）——独立产出，运行时不引用
+## D. phase C 隐物体信念（不随包发布）
 
-| 文件 | 说明 |
-|---|---|
-| `mllm_base_agent/agent/hidden_location_advisor.py` | 依赖 `phase_c/hidden_world_belief/` 的排序器；runner 里没有任何 import |
-| `mllm_base_agent/agent/test_hidden_location_advisor.py` | 上述模块的单测（phase_c 文档引用了这个路径） |
-
-它们是 phase C（`phase_c/hidden_world_belief/`）的独立模块，运行时不引用，
-也不影响任何评测口径。
+`hidden_location_advisor.py` 与它的单测属 phase C
+（`phase_c/hidden_world_belief/`）的独立产出，运行时不引用，2026-09-19
+起不再进 overlay：`verify_delivery.sh` 第一步要求 overlay 与工作区逐字节
+一致，而工作区里没有这两个文件（它们只存在于 phase_c 目录）。
 
 ## E. 实验配置（21 个，`experiments/configs/`）
 

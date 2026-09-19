@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import time
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -13,6 +14,18 @@ from dotenv import load_dotenv
 from mllm_base_agent.llm.messages import ModelResponse, to_openai_messages
 
 load_dotenv()
+
+#: 2026-09-19：这台工作站到网关的 IPv6 出网是坏的（SYN-SENT 卡死），而
+#: Python 的 requests 不像 curl 会做双栈竞速——它只取 getaddrinfo 的第一条，
+#: 于是每个请求都要等满超时再重试，整批任务停摆。`VLM_FORCE_IPV4=1` 时把
+#: 解析强制到 IPv4，绕开这个问题（默认关闭，不影响能正常走 IPv6 的机器）。
+if os.environ.get("VLM_FORCE_IPV4") == "1":
+    _orig_getaddrinfo = socket.getaddrinfo
+
+    def _getaddrinfo_v4(host, port, family=0, type=0, proto=0, flags=0):  # type: ignore[no-untyped-def]
+        return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+
+    socket.getaddrinfo = _getaddrinfo_v4  # type: ignore[assignment]
 
 GEMINI_RESPONSES_MODELS = {
     "Gemini 3-Pro-Preview",
@@ -161,7 +174,8 @@ class OpenAICompatibleChatModel:
 
     def _request_with_requests(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
-        response = requests.post(self.chat_url, headers=headers, data=json.dumps(payload), timeout=self.timeout)
+        body = json.dumps(payload)
+        response = requests.post(self.chat_url, headers=headers, data=body, timeout=self.timeout)
         if response.status_code >= 400:
             body = response.text.strip()
             if len(body) > 1000:
@@ -173,6 +187,17 @@ class OpenAICompatibleChatModel:
         return response.json()
 
     def _make_api_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        # 调试用：把真实请求体落盘（run 目录的 log.json 是从历史轨迹重拼的，
+        # 不含运行时注入的块，只有这里能证明"注入到底有没有上线"）。
+        _dump = os.environ.get("VLM_DUMP_DIR")
+        if _dump:
+            try:
+                os.makedirs(_dump, exist_ok=True)
+                with open(os.path.join(_dump, f"req_{int(time.time() * 1000)}.json"),
+                          "w", encoding="utf-8") as fh:
+                    fh.write(json.dumps(payload, ensure_ascii=False))
+            except Exception:
+                pass
         max_retries = (
             self.client_max_retries
             if self.client_max_retries is not None

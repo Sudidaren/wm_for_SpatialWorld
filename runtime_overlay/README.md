@@ -1,6 +1,6 @@
 # LightWM runtime overlay（相对官方 SpatialWorld 的全部代码改动）
 
-> 本 overlay 含 **52 个文件**，与 SpatialWorld 工作区逐字节一致（`MANIFEST.sha256`）。
+> 本 overlay 含 **53 个文件**，与 SpatialWorld 工作区逐字节一致（`MANIFEST.sha256`）。
 > 逐文件说明见 [`INVENTORY.md`](INVENTORY.md)，完整交接见
 > [`docs/HANDOVER_2026-09-16.md`](../docs/HANDOVER_2026-09-16.md)。
 
@@ -8,7 +8,7 @@
 
 `runtime_overlay/` 里的文件 = 相对官方
 `github.com/Hongcheng-Gao/SpatialWorld`（commit `f47b1e0`，main）的全部 LightWM
-运行时代码（52 个文件）。克隆官方仓库后把这些文件覆盖过去，再按下面脚本校验，
+运行时代码（53 个文件）。克隆官方仓库后把这些文件覆盖过去，再按下面脚本校验，
 即可得到与本地一致的运行时代码。
 
 ## 怎么用（三条命令）
@@ -30,15 +30,15 @@ bash lightwm/runtime_overlay/verify_delivery.sh \
     --repo $(pwd) --overlay lightwm/runtime_overlay
 ```
 
-`verify_delivery.sh` 会依次检查：① 52 个文件 sha256 一致；② overlay 里没有未登记的
+`verify_delivery.sh` 会依次检查：① 53 个文件 sha256 一致；② overlay 里没有未登记的
 文件（无冗余）；③ 运行时可编译；④ **信息隔离审计 + 功能冒烟**（`tests/test_wm_delivery.py`：
 无模拟器通道 / 无任务真值 / 无对象词表，且记忆读数、目标提示、CheckState、锚点与位姿
 都能真的跑出来）；⑤ 其余三组单测。全程不需要 GPU、模拟器和模型权重。
 
-校验通过 = 52 个文件与本地逐字节一致（sha256）。
+校验通过 = 53 个文件与本地逐字节一致（sha256）。
 
 > **2026-09-16 实测**：在一个干净的 `f47b1e0` worktree 上执行上面三条命令，
-> 52/52 `sha256 OK`、`verify_delivery.sh` **7 个步骤全过**（含 14 项信息隔离
+> 52/52 `sha256 OK`（当时版本）、`verify_delivery.sh` **7 个步骤全过**（含 14 项信息隔离
 > 审计与功能冒烟、7+9+10 项单测）。
 > overlay 只做"新增 + 覆盖"，官方 `mllm_base_agent/agent/` 在 f47b1e0 只有
 > 4 个文件（`__init__.py` / `graph.py` / `runner.py` / `state.py`），
@@ -80,12 +80,13 @@ export LIGHTWM_DATA_ROOT=/data/lightwm_data       # 6 个数据池根（见 ligh
 
 - `tests/test_wm_delivery.py`（信息隔离审计 + 功能冒烟，21 项）
 - `tests/test_object_query.py`（7）、`tests/test_object_query_loop.py`（9）、
-  `tests/test_target_priority.py`（10）
+  `tests/test_target_priority.py`（15）、`tests/test_state_variants.py`（15）
 
-**独立产出（运行时不引用）**
+**独立产出（运行时不引用、不随 overlay 发布）**
 
-- `mllm_base_agent/agent/hidden_location_advisor.py` 与
-  `test_hidden_location_advisor.py` 属 phase C（`phase_c/hidden_world_belief/`）的独立模块。
+- `hidden_location_advisor.py` 与它的单测属 phase C
+  （`phase_c/hidden_world_belief/`）的独立模块，2026-09-19 起移出 overlay：
+  工作区里没有这两个文件，而第一步校验要求逐字节一致。
 
 **实验配置**
 

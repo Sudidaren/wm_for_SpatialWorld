@@ -654,6 +654,8 @@ def act_node(state: AgentState) -> AgentState:
                         + (str(sorted(raw_meta.keys())) if isinstance(raw_meta, dict)
                            else type(raw_meta).__name__)
                         + f" n_obj={len((raw_meta or {}).get('objects') or []) if isinstance(raw_meta, dict) else -1}"
+                        + f" inv={[(o or {}).get('objectType') for o in ((raw_meta or {}).get('inventoryObjects') or [])]}"
+                        + f" outcome={(raw_meta or {}).get('action_outcome')}"
                         + f" agent={(raw_meta or {}).get('agent') if isinstance(raw_meta, dict) else None}",
                         flush=True,
                     )

@@ -118,7 +118,9 @@ class MemoryProbe:
             inv = wm_metadata.get("inventoryObjects") or []
             held = ""
             if inv:
-                held = str((inv[0] or {}).get("objectType") or "")
+                # 环境改名后（Lettuce -> LettuceSliced）报模型能用的那个名字。
+                held = str((inv[0] or {}).get("objectTypeDisplay")
+                           or (inv[0] or {}).get("objectType") or "")
             # 2026-09-19：空手这一行是零信息（模型自己看得见手），不再注入；
             # 只有真的拿着东西时才报——那时它才影响下一步能做什么。
             if held:

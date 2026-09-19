@@ -24,6 +24,11 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    from . import state_variants
+except ImportError:                      # script / flat import fallback
+    import state_variants
+
 #: injected once, at step 0, in front of the first image
 PROTOCOL_TEXT = """**收尾前可以查一次 WM 的状态（可选）**
 如果你想在结束任务前确认各物体的状态，输出 CheckState()（等价写法 Query(all)），
@@ -134,6 +139,10 @@ class ObjectMemory:
             entry["last_seen_step"] = int(step)
             entry["visible"] = bool(obj.get("visible"))
             entry["distance"] = float(obj.get("distance") or 0.0)
+            # 环境改名后模型必须用新名字，所以汇总里也报那一个；状态词来自
+            # WM 自己的动作台账（Sliced/Cooked/Open/...）。
+            entry["display"] = str(obj.get("objectTypeDisplay") or otype)
+            entry["state"] = dict(obj.get("state") or {})
             if pos.get("x") is not None:
                 entry["pos"] = (float(pos["x"]), float(pos.get("z") or 0.0))
             if obj.get("sigma") is not None:
@@ -143,7 +152,8 @@ class ObjectMemory:
                     float(pos["x"]) - float(ax),
                     float(pos.get("z") or 0.0) - float(az), yaw)
         inv = wm_metadata.get("inventoryObjects") or []
-        self.held = str((inv[0] or {}).get("objectType") or "") if inv else ""
+        self.held = str((inv[0] or {}).get("objectTypeDisplay")
+                        or (inv[0] or {}).get("objectType") or "") if inv else ""
 
     def record_interaction(self, step: int, action_name: Optional[str],
                            object_type: Optional[str],
@@ -151,7 +161,10 @@ class ObjectMemory:
         """Remember the frame-difference verdict of an interaction."""
         if not action_name or not object_type:
             return
-        self.acts.setdefault(str(object_type), []).append(
+        # 用 WM 自己的槽位名归档：动作里的 LettuceSliced 说的就是槽位 Lettuce，
+        # 归并规则同样来自随提示词发布的改名规则。
+        target = state_variants.base_of(str(object_type))
+        self.acts.setdefault(target, []).append(
             (int(step), str(action_name), ok))
 
     # -- rendering ---------------------------------------------------
@@ -169,14 +182,18 @@ class ObjectMemory:
             chosen = True
         sigma = entry.get("sigma")
         band = f" ±{sigma:.1f}m" if sigma else ""
+        shown = str(entry.get("display") or otype)
+        word = state_variants.state_word(entry.get("state"))
         if entry.get("visible"):
-            head = f"{otype}：当前可见，{direction}约 {dist:.1f}m"
+            head = f"{shown}：当前可见，{direction}约 {dist:.1f}m"
         else:
-            head = (f"{otype}：记住的位置在{direction}约 {dist:.1f}m{band}"
+            head = (f"{shown}：记住的位置在{direction}约 {dist:.1f}m{band}"
                     f"（step {entry.get('last_seen_step')} 看到过，之后没再看到）")
             if not chosen:
-                head = (f"{otype}：上次看到在{direction}约 {dist:.1f}m{band}"
+                head = (f"{shown}：上次看到在{direction}约 {dist:.1f}m{band}"
                         f"（step {entry.get('last_seen_step')}，位置未经重算）")
+        if word:
+            head += f"；{word}"
         acts = self.acts.get(otype) or []
         if acts:
             step_i, name, ok = acts[-1]
