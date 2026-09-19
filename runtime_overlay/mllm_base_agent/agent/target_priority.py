@@ -1,16 +1,26 @@
-"""Priority-ranked target hint, built from the MODEL's own object names.
+"""Priority-ranked target hint, built by matching the instruction to detections.
 
-No object vocabulary, no alias table (2026-09-16 decision: the baseline never
-sees one, so the WM arm must not use one either).  Instead:
+2026-09-19: the one-shot VLM extraction was replaced by a deterministic
+*object-to-object* match, because it costs one API call per task and, measured
+on our own runs, covered fewer targets than plain string matching did.
 
-  1. at the start of the episode the agent's own VLM is asked, in free text,
-     which objects the instruction involves -- one extra text call per task;
-  2. those runtime strings are matched against the *runtime* output of the
-     perception head (case-insensitive / substring), so an object only ever
-     gets a position if the world model actually detected something whose
-     name the model itself used;
-  3. everything else (tiers, quotas, "only memory", pose-triggered refresh,
+The rule now is:
+
+  1. take the instruction's own words (1-, 2- and 3-grams, singular and
+     plural);
+  2. a detected object is task-relevant iff its own name -- the whole
+     CamelCase name, spaced or joined, singular or plural -- appears in the
+     instruction.  No object vocabulary, no alias table, no word similarity,
+     no category matching: object to object only;
+  3. once an object has been recognised it stays relevant for the rest of the
+     episode, even after it leaves the view (that is what makes the memory
+     useful);
+  4. everything else (tiers, quotas, "only memory", pose-triggered refresh,
      distance/sigma caps, predicate demotion) is unchanged.
+
+``LIGHTWM_TARGET_MODE=llm`` restores the previous behaviour (ask the VLM to
+name the objects, then substring-match its answer); it is kept only so the old
+arm can still be reproduced.  The default is ``exact``.
 
 The only fixed string left in this file is one *verb* pattern
 (``_DEST_VERB``, used by the settled-predicate test to read
@@ -21,6 +31,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
@@ -52,6 +63,41 @@ EXTRACTION_PROMPT = (
 
 def normalize(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(name or "").lower())
+
+
+def _singulars(tok: str) -> Set[str]:
+    """Cheap English singulariser (tomatoes -> tomato, knives -> knife...)."""
+    out = {tok}
+    for suf, rep in (("ies", "y"), ("ves", "f"), ("ves", "fe"), ("es", ""), ("s", "")):
+        if tok.endswith(suf) and len(tok) > len(suf) + 1:
+            out.add(tok[: -len(suf)] + rep)
+    return out
+
+
+def instruction_grams(text: str) -> Set[str]:
+    """The instruction's own words and short phrases, singular and plural."""
+    toks = re.sub(r"[^a-z0-9 ]", " ", (text or "").lower()).split()
+    grams: Set[str] = set(toks)
+    grams |= {" ".join(toks[i:i + 2]) for i in range(len(toks) - 1)}
+    grams |= {" ".join(toks[i:i + 3]) for i in range(len(toks) - 2)}
+    grams |= {s for g in list(grams) for s in _singulars(g)}
+    return grams
+
+
+def type_name_forms(cls: str) -> Set[str]:
+    """The spellings of one object type: whole name only, singular and plural."""
+    words = [w.lower() for w in re.split(r"(?<=[a-z])(?=[A-Z])|[\s_-]+", cls) if w]
+    if not words:
+        return set()
+    out = {" ".join(words), "".join(words)}
+    out |= {f + "s" for f in list(out)}
+    return out
+
+
+def relevant_types(text: str, detected: Iterable[str]) -> Set[str]:
+    """Detected types whose own name appears in the instruction text."""
+    grams = instruction_grams(text)
+    return {str(t) for t in detected if type_name_forms(str(t)) & grams}
 
 
 def match_names(model_names: Iterable[str],
@@ -186,9 +232,29 @@ class TargetHinter:
     def __init__(self, task_description: str, vlm: Any = None,
                  limit: int = 6, names_limit: int = 5,
                  max_dist: float = 3.0, max_sigma: float = 0.5,
-                 memory_frames: Optional[int] = None) -> None:
+                 memory_frames: Optional[int] = None,
+                 mode: Optional[str] = None,
+                 extra_slots: Optional[int] = None,
+                 visible_all: Optional[bool] = None) -> None:
         self.task_desc = task_description or ""
         self.vlm = vlm
+        #: "exact" (default): the instruction's own words are matched against
+        #: the detected type names, object to object.  "llm": the previous
+        #: behaviour, one extraction call per task.  Kept for reproducing the
+        #: earlier arm; the default is the deterministic one.
+        self.mode = (mode or os.environ.get("LIGHTWM_TARGET_MODE", "exact")).lower()
+        #: 2026-09-19：块里只留任务相关物体。旧版每步还会各塞 1 个"已交互"和
+        #: 1 个"只是见过"的物体（tier 3/4），那既占 token 又与"只提示相关物"
+        #: 的规则冲突；要用回旧行为就设 LIGHTWM_HINT_EXTRA_SLOTS=1。
+        self.extra_slots = int(extra_slots if extra_slots is not None
+                               else os.environ.get("LIGHTWM_HINT_EXTRA_SLOTS", "0") or 0)
+        #: "视野内"那一行默认也只列任务相关物体（其余的模型自己看得见）。
+        #: LIGHTWM_HINT_VISIBLE_ALL=1 恢复旧行为。
+        self.visible_all = bool(visible_all if visible_all is not None
+                                else os.environ.get("LIGHTWM_HINT_VISIBLE_ALL", "0") == "1")
+        #: Types recognised so far.  Once an object is task-relevant it stays
+        #: relevant -- that persistence is the whole point of the memory.
+        self._relevant: Set[str] = set()
         self.limit = int(limit)
         self.names_limit = int(names_limit)
         self.max_dist = float(max_dist)
@@ -207,11 +273,25 @@ class TargetHinter:
 
     # -- the model's own object list ---------------------------------
     def entries(self) -> List[Tuple[str, str]]:
-        """The model's own object list: (env token, its own wording) pairs."""
+        """The model's own object list (only used by ``mode='llm'``)."""
         if self._entries is not None:
             return self._entries
         self._entries = self._ask_model()
         return self._entries
+
+    def relevant(self, detected: Iterable[str]) -> Set[str]:
+        """Which detected objects does this instruction name?  Accumulates."""
+        if self.mode == "llm":
+            by_type = {str(t): str(t) for t in detected}
+            for env_name, words in self.entries():
+                hit = match_names([env_name], list(by_type))
+                if not hit and words:
+                    hit = match_names([words], list(by_type))
+                if hit:
+                    self._relevant.add(list(hit.values())[0])
+        else:
+            self._relevant |= relevant_types(self.task_desc, detected)
+        return set(self._relevant)
 
     def model_names(self) -> List[str]:
         return [env for env, _ in self.entries()]
@@ -273,16 +353,23 @@ class TargetHinter:
                     cur.get("distance") or 1e9):
                 by_type[tp] = obj
 
-        entries = self.entries()
-        # 匹配：先用模型给的 env 名，匹配不上再退回它自己的说法
-        matched: Dict[str, str] = {}
-        for env_name, words in entries:
-            hit = match_names([env_name], list(by_type))
-            if not hit and words:
-                hit = match_names([words], list(by_type))
-            if hit:
-                matched[env_name] = list(hit.values())[0]
-        wanted: Set[str] = set(matched.values())
+        # 任务相关物体：exact 模式下就是"指令里点了名、而且被检测到"的那些，
+        # 识别过一次就永久保留（规则 3）。
+        relevance = self.relevant(list(by_type))
+        wanted: Set[str] = {t for t in relevance if t in by_type}
+        entries: List[Tuple[str, str]] = (self.entries() if self.mode == "llm"
+                                          else [(t, t) for t in sorted(wanted)])
+        # exact 模式下每个 entry 都已经落在检测结果里，下面的“说了但没见过”
+        # 分支因此自然为空；llm 模式下保留原来的 matched 语义。
+        matched: Dict[str, str] = ({t: t for t in wanted} if self.mode != "llm"
+                                   else {})
+        if self.mode == "llm":
+            for env_name, words in entries:
+                hit = match_names([env_name], list(by_type))
+                if not hit and words:
+                    hit = match_names([words], list(by_type))
+                if hit:
+                    matched[env_name] = list(hit.values())[0]
         states = {tp: (o.get("state") or {}) for tp, o in by_type.items()}
         contents: Dict[str, List[str]] = {}
         for tp, obj in by_type.items():
@@ -297,10 +384,14 @@ class TargetHinter:
             candidates.update(str(x) for x in inside)
         for tp in candidates:
             obj = by_type.get(tp)
+            if tp == holding:
+                # 手里拿着的东西不需要"记住的位置"——「手持：X」那行已经说了，
+                # 再报一次位置等于让模型去找自己手上的物体。
+                continue
             if obj is not None and obj.get("visible"):
                 continue                    # 当前可见 -> 只进“视野内”行
             act = acts.get(tp)
-            if tp == holding or any(tp in v for v in contents.values()):
+            if any(tp in v for v in contents.values()):
                 tier = 2
             elif tp in wanted:
                 tier = 1
@@ -353,7 +444,7 @@ class TargetHinter:
         rows = [r for r in rows if not r["settled"]]
         rows.sort(key=lambda r: r["tier"])
         chosen: List[Dict[str, Any]] = []
-        quota = {1: 99, 2: 99, 3: 1, 4: 1}
+        quota = {1: 99, 2: 99, 3: self.extra_slots, 4: self.extra_slots}
         for row in rows:
             if quota[row["tier"]] <= 0:
                 continue
@@ -402,6 +493,8 @@ class TargetHinter:
                               key=lambda kv: float(kv[1].get("distance") or 1e9)):
             if not obj.get("visible"):
                 continue
+            if not self.visible_all and tp not in wanted:
+                continue                    # 只报任务相关物体
             pos = obj.get("position") or {}
             word = ""
             if ax is not None and az is not None and pos.get("x") is not None:

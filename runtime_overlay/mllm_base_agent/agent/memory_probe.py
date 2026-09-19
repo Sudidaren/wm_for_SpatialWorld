@@ -110,20 +110,19 @@ class MemoryProbe:
             held = ""
             if inv:
                 held = str((inv[0] or {}).get("objectType") or "")
-            parts.append(f"手持：{held}" if held else "手持：空手")
+            # 2026-09-19：空手这一行是零信息（模型自己看得见手），不再注入；
+            # 只有真的拿着东西时才报——那时它才影响下一步能做什么。
+            if held:
+                parts.append(f"手持：{held}")
             if blocked:
                 parts.append(
                     "移动提示：上一步的移动没有让画面发生变化（多半被挡）。"
                     "换方向绕行——先 RotateLeft(90)/RotateRight(90) 再 MoveAhead，"
                     "不要连续重复同一个被挡的动作"
                 )
-            if action_name:
-                if action_ok is True:
-                    parts.append(f"上一个动作：{action_name}（成功：画面已变化）")
-                elif action_ok is False:
-                    parts.append(f"上一个动作：{action_name}（失败：画面未变化）")
-                else:
-                    parts.append(f"上一个动作：{action_name}")
+            # 同理：成功的那一步画面自己会说明，只有失败才值得占 token。
+            if action_name and action_ok is False:
+                parts.append(f"上一个动作：{action_name}（失败：画面未变化）")
         except Exception:
             import os as _os
             if _os.environ.get("WM_DEBUG"):

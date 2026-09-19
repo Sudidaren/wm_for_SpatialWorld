@@ -261,14 +261,16 @@ def test_memory_readout_lines():
         action_name="MoveAhead", object_type=None,
         blocked=True, action_ok=False,
     )
-    assert "手持：空手" in block, block
+    # 2026-09-19：空手与"动作成功"都不再注入（模型自己看得见），
+    # 只有真正影响下一步的信息才占 token。
+    assert "手持" not in block, block
     assert "移动提示" in block, block
     assert "上一个动作：MoveAhead（失败" in block, block
 
     held = probe.update(wm_metadata=meta(held="Egg"), action_name="PickupObject",
                         object_type="Egg", blocked=False, action_ok=True)
     assert "手持：Egg" in held, held
-    assert "上一个动作：PickupObject（成功" in held, held
+    assert "上一个动作" not in held, held
 
 
 def test_target_hint_off_by_default():
@@ -282,7 +284,7 @@ def test_target_hint_off_by_default():
         action_name="RotateLeft", blocked=False, action_ok=True)
     assert "任务相关记忆" not in block, block
     assert "Apple" not in block, block
-    assert "手持：空手" in block, block
+    assert "手持" not in block, block
 
 
 def test_target_hint_reports_detected_object():
@@ -296,7 +298,9 @@ def test_target_hint_reports_detected_object():
     block = probe.update(
         wm_metadata=meta(objects=[("Apple", 0.0, 0.9, 2.0, False, 2.0, 0.2)]),
         action_name="RotateLeft", blocked=False, action_ok=True)
-    assert vlm.calls == 1, f"one extra text call expected, got {vlm.calls}"
+    # 2026-09-19：不再每任务多调一次模型——相关物体由"指令里的词 ↔ 检测到的
+    # 类名"直接对齐（物对物），所以这里必须零调用。
+    assert vlm.calls == 0, f"the exact path must not call the model, got {vlm.calls}"
     assert "任务相关记忆" in block, block
     assert "Apple" in block, block
     assert "约 2.0m" in block, block
@@ -654,14 +658,13 @@ def test_memory_horizon_switch_drops_remembered_positions():
     def render(memory_frames):
         h = tp.TargetHinter(task_description="put the egg in the fridge",
                             vlm=None, memory_frames=memory_frames)
-        h._entries = [("Egg", "egg"), ("Fridge", "fridge")]
         return h.update(meta, {}, "", 5)
 
     full = render(None)
     assert "记住的位置" in full, full          # shipped: memory is shown
     none_mem = render(0)
     assert "记住的位置" not in none_mem, none_mem
-    assert "目前没见过" in none_mem, none_mem
+    assert "Egg" in none_mem, none_mem         # 当前可见的那个仍在视野内行里
     # a horizon that covers the sighting keeps it
     assert "记住的位置" in render(3), render(3)
 
@@ -686,8 +689,18 @@ def test_no_inject_switch_is_silent():
                             action_ok=True) == ""
     finally:
         os.environ.pop("WM_NO_INJECT", None)
-    assert probe.update(wm_metadata=meta, action_name="MoveAhead",
-                        action_ok=True).startswith("🧠")
+    # 没有相关物体、没手持、动作也没失败 -> 本来就无可注入；有内容时才成块。
+    probe.set_target_hint({"enabled": True})
+    probe2 = MemoryProbe(task_description="pick up the mug")
+    probe2.set_target_hint({"enabled": True})
+    rich = probe2.update(
+        wm_metadata={"inventoryObjects": [], "action_outcome": {"ok": True},
+                     "objects": [{"objectType": "Mug", "visible": True,
+                                  "distance": 1.1, "sigma": 0.2,
+                                  "position": {"x": 0.0, "y": 0.9, "z": 1.1},
+                                  "last_seen_step": 1, "contents": [], "state": {}}]},
+        action_name="MoveAhead", action_ok=False)
+    assert rich.startswith("🧠"), rich
 
 
 def test_short_baseline_views_do_not_own_the_position():

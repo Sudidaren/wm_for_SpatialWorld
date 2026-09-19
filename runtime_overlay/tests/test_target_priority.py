@@ -102,7 +102,9 @@ def test_matching_is_case_and_substring_based():
 
 def test_hint_reports_only_detected_matches():
     vlm = StubVLM(["GarbageCan", "Lettuce"])
-    h = tp.TargetHinter("throw the lettuce in the trash", vlm=vlm)
+    # mode="llm" is the *legacy* path (ask the VLM to name the objects); the
+    # default is now the deterministic object-to-object match below.
+    h = tp.TargetHinter("throw the lettuce in the trash", vlm=vlm, mode="llm")
     text = h.update(meta([obj("GarbageCan", dist=2.0)]), {}, "", 1)
     assert "GarbageCan" in text, text
     assert "Lettuce（任务目标·模型自述）：目前没见过" in text, text
@@ -148,9 +150,50 @@ def test_quota_and_settled_demotion():
 
 def test_held_object_reported_without_position():
     vlm = StubVLM(["Egg"])
-    h = tp.TargetHinter("crack the egg", vlm=vlm)
+    h = tp.TargetHinter("crack the egg", vlm=vlm, mode="llm")
     text = h.update(meta([obj("Pan")], held="Egg"), {}, "Egg", 1)
     assert "Egg（手持/容器内容" in text, text
+
+
+# --- the deterministic object-to-object path (default since 2026-09-19) ----
+
+def test_exact_match_uses_only_names_in_the_instruction():
+    h = tp.TargetHinter("put the apple in the fridge")
+    text = h.update(meta([obj("Apple", dist=1.0), obj("Fridge", dist=2.0, x=0.0, z=2.0),
+                          obj("GarbageCan", dist=3.0, x=0.0, z=3.0)]), {}, "", 1)
+    assert "Fridge" in text, text
+    assert "GarbageCan" not in text, text          # not named -> not relevant
+
+
+def test_exact_match_handles_compounds_and_plurals():
+    h = tp.TargetHinter("turn off the desk lamps and slice the tomatoes")
+    h.update(meta([obj("DeskLamp", dist=2.0, x=0.0, z=2.0),
+                   obj("Tomato", dist=1.0, x=0.0, z=1.0),
+                   obj("Potato", dist=1.0, x=0.0, z=1.0)]), {}, "", 1)
+    assert h.relevant(["DeskLamp", "Tomato", "Potato"]) == {"DeskLamp", "Tomato"}
+
+
+def test_exact_match_needs_no_vlm_call():
+    class Boom:
+        def invoke(self, *a, **kw):
+            raise AssertionError("the exact path must not call the model")
+
+    h = tp.TargetHinter("open the laptop", vlm=Boom())
+    h.update(meta([obj("Laptop", dist=2.0, x=0.0, z=2.0)]), {}, "", 1)
+    assert h.relevant(["Laptop"]) == {"Laptop"}
+
+
+def test_relevance_persists_after_the_object_leaves_the_view():
+    h = tp.TargetHinter("open the laptop")
+    h.update(meta([obj("Laptop", dist=2.0, x=0.0, z=2.0)]), {}, "", 1)
+    # 第二步检测列表里没有 Laptop 了，但相关性必须保留（规则 3）
+    assert h.relevant(["Desk", "Mug"]) == {"Laptop"}
+
+
+def test_exact_mode_emits_no_never_seen_lines():
+    h = tp.TargetHinter("throw the lettuce in the trash")
+    text = h.update(meta([obj("GarbageCan", dist=2.0, x=0.0, z=2.0)]), {}, "", 1)
+    assert "没见过" not in text, text
 
 
 def main():
