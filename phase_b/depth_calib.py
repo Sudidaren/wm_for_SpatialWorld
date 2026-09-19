@@ -71,12 +71,32 @@ import numpy as np
 
 #: AI2-THOR camera height above the agent root (``initializationParameters``).
 CAMERA_Y = 0.675
+#: ... which is NOT the camera's height above the floor.  Measured on the
+#: collected episodes (unprojecting ground-truth depth):
+#:
+#:   * pixels whose depth puts them 1.576 m below the camera land at world
+#:     y ~= 0.00  -> that is the floor (1.576 = agent y 0.901 + CAMERA_Y);
+#:   * pixels 0.675 m below the camera land at world y ~= 0.92 -> counter tops.
+#:
+#: So ``GroundCalibConfig.cam_height`` must be read as "how far below the
+#: camera the plane we anchor on sits", and anchoring on the *floor* needs
+#: 1.576 m on this corpus, not 0.675 m.  The 0.675 default is kept because it
+#: is the value every measurement in results/depth_head_ab_20260918 was made
+#: with, and that plane (counter tops / tables) is the one that is actually
+#: visible in most kitchen frames -- but it is a scene measurement, not a rig
+#: constant, and the code must not pretend otherwise.
+FLOOR_BELOW_CAMERA_DEFAULT = 1.576
 #: AI2-THOR ``fieldOfView`` default.  Unity semantics: VERTICAL.
 FOV_DEG = 60.0
 
 
 @dataclass
 class GroundCalibConfig:
+    #: distance from the camera down to the plane the anchor uses.  This is
+    #: NOT a rig constant: 0.675 m below the camera is the counter-top plane
+    #: on the collected corpus, while the true floor sits 1.576 m below it
+    #: (see the module-level note).  Anchoring on the floor means setting this
+    #: to ``agent_y + CAMERA_Y``.
     cam_height: float = CAMERA_Y
     fov: float = FOV_DEG
     #: "vertical" (correct for AI2-THOR) or "horizontal" (legacy convention in
