@@ -15,13 +15,16 @@ The rule now is:
   3. once an object has been recognised it stays relevant for the rest of the
      episode, even after it leaves the view (that is what makes the memory
      useful);
-  4. an object the agent has already acted on counts as relevant too: its own
-     action stream is evidence the task is about that object, and it is the
-     only signal that reaches the "slice all the vegetables" tasks, whose
-     instruction names no object at all (``LIGHTWM_TARGET_FROM_ACTION=0``
-     turns this off);
-  5. everything else (tiers, quotas, "only memory", pose-triggered refresh,
+  4. everything else (tiers, quotas, "only memory", pose-triggered refresh,
      distance/sigma caps, predicate demotion) is unchanged.
+
+An object the agent has already acted on is *not* relevant by that fact alone:
+the agent knows what it just did, and promoting a chance interaction to "task
+target" would keep re-reporting whatever it happened to open and can even tell
+it to walk back to it.  ``LIGHTWM_TARGET_FROM_ACTION=1`` turns that channel
+back on as an ablation (measured: +0.22 correct and +0.07 wrong targets per
+task, rescuing 20 of the 28 tasks whose instruction names no detected object);
+it is off in the released configuration.
 
 ``LIGHTWM_TARGET_MODE=llm`` restores the previous behaviour (ask the VLM to
 name the objects, then substring-match its answer); it is kept only so the old
@@ -282,10 +285,14 @@ class TargetHinter:
         self.visible_all = bool(visible_all if visible_all is not None
                                 else os.environ.get("LIGHTWM_HINT_VISIBLE_ALL", "0") == "1")
         #: 2026-09-19：模型已经对某个物体下过手（PickupObject / SliceObject /
-        #: OpenObject ...），那它就是任务相关物体——这个信号完全来自模型自己
-        #: 的输出，不需要真值、不需要词表。开关 LIGHTWM_TARGET_FROM_ACTION=0
-        #: 关掉它，用于消融"相关集只由指令文本决定"这一版本。
-        self.from_action = os.environ.get("LIGHTWM_TARGET_FROM_ACTION", "1") != "0"
+        #: OpenObject ...），那它算不算任务相关物体——**默认不算**。
+        #: 理由：那是模型自己刚做的动作，它自己知道；而把"我碰过的东西"升格成
+        #: 任务目标，一旦它只是随手开了个柜子，我们就会一直报那个柜子、还可能
+        #: 主动建议它走回去，等于把模型的误操作固化成目标。
+        #: 代码留着用于消融（LIGHTWM_TARGET_FROM_ACTION=1 打开，离线实测：
+        #: 每任务 +0.22 正确 / +0.07 错误目标，救回 28 个零注入任务里的 20 个），
+        #: 但发布口径是关。
+        self.from_action = os.environ.get("LIGHTWM_TARGET_FROM_ACTION", "0") == "1"
         #: Types recognised so far.  Once an object is task-relevant it stays
         #: relevant -- that persistence is the whole point of the memory.
         self._relevant: Set[str] = set()
@@ -333,13 +340,14 @@ class TargetHinter:
                  acts: Dict[str, Tuple[int, str, Optional[bool]]]) -> Set[str]:
         """Detected types the agent has already issued an interaction on.
 
-        The agent's own action stream says which object the task is about far
-        more reliably than the instruction's wording does: "slice all the
-        vegetables" names no object at all, and the agent still reaches for
-        the Lettuce.  Names are grounded against the slots the world model
-        actually perceived (through the prompt's own rename rule, so
-        ``PickupObject(LettuceSliced)`` attributes to the ``Lettuce`` slot),
-        so an invented name cannot create a hint line out of nothing.
+        Off in the released configuration (see ``from_action``); this is the
+        ablation channel.  When it is on, the agent's own action stream decides
+        which object the task is about: "slice all the vegetables" names no
+        object at all, and the agent still reaches for the Lettuce.  Names are
+        grounded against the slots the world model actually perceived (through
+        the prompt's own rename rule, so ``PickupObject(LettuceSliced)``
+        attributes to the ``Lettuce`` slot), so an invented name cannot create
+        a hint line out of nothing.
         """
         out: Set[str] = set()
         if not self.from_action:

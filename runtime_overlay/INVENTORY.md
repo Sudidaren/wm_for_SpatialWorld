@@ -13,7 +13,7 @@
 | `mllm_base_agent/agent/world_model.py` | 世界模型：RGB+单目深度建锚点、航位推算位姿、回环纠偏、记忆账本、`_to_metadata()` 输出契约 | 没有 WM |
 | `mllm_base_agent/agent/memory_probe.py` | 每步提示块：手持 / 移动被挡 / 上一动作成败；挂载目标物提示 | 模型看不到记忆 |
 | `mllm_base_agent/agent/self_observation.py` | 帧差判动作成败（MSE>1），替代模拟器 error_message | 只能退回读模拟器错误串（作弊） |
-| `mllm_base_agent/agent/target_priority.py` | 目标物位置提示（`WM_TARGET_HINT`，默认关） | 消融开关失效 |
+| `mllm_base_agent/agent/target_priority.py` | 目标物位置提示（`WM_TARGET_HINT`，默认关）；相关集**只取指令里点名的物体**，动作目标通道 `LIGHTWM_TARGET_FROM_ACTION` 默认关（消融用） | 消融开关失效 |
 | `mllm_base_agent/agent/object_query.py` | `CheckState()` 完成前查状态（`WM_STATE_CHECK`，默认关） | 消融开关失效 |
 | `mllm_base_agent/agent/state_variants.py` | 加工态改名规则（`SliceObject(X)→XSliced` 等）**从模型本来就收到的系统提示词里解析**，用于把动作里的 `LettuceSliced` 归并回 WM 自己的 `Lettuce` 槽位 | 切过的物体判不出手持/成败、相关集挂不上 |
 

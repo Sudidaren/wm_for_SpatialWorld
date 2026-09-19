@@ -159,57 +159,80 @@ def test_a_name_we_cannot_place_creates_no_variant():
 # --------------------------------------------------------------------------
 # the hint
 # --------------------------------------------------------------------------
+def _with_action_channel(fn):
+    """The action channel is an ablation: it is off unless switched on."""
+    os.environ["LIGHTWM_TARGET_FROM_ACTION"] = "1"
+    try:
+        return fn()
+    finally:
+        del os.environ["LIGHTWM_TARGET_FROM_ACTION"]
+
+
 def test_action_targets_join_the_relevant_set():
     """'slice all the vegetables' names no object; the action stream does."""
-    hinter = TargetHinter(task_description="slice all the vegetables in front of me")
-    acts = {"Lettuce": (1, "SliceObject", True)}
-    objects = [_obj("Lettuce", 1.2, visible=False, step=3),
-               _obj("Bowl", 2.0, visible=False)]
-    block = hinter.update(_meta(objects), acts, "", 4)
+    def run():
+        hinter = TargetHinter(
+            task_description="slice all the vegetables in front of me")
+        acts = {"Lettuce": (1, "SliceObject", True)}
+        objects = [_obj("Lettuce", 1.2, visible=False, step=3),
+                   _obj("Bowl", 2.0, visible=False)]
+        return hinter.update(_meta(objects), acts, "", 4)
+
+    block = _with_action_channel(run)
     assert "Lettuce" in block, block
     assert "Bowl" not in block, block
 
 
 def test_a_variant_action_target_reaches_the_base_slot():
-    hinter = TargetHinter(task_description="I want to slice all the vegetables.")
-    acts = {"LettuceSliced": (2, "PickupObject", True)}
-    objects = [_obj("Lettuce", 1.0, visible=False, step=3,
-                    display="LettuceSliced", state={"isSliced": True})]
-    block = hinter.update(_meta(objects), acts, "LettuceSliced", 3)
+    def run():
+        hinter = TargetHinter(
+            task_description="I want to slice all the vegetables.")
+        acts = {"LettuceSliced": (2, "PickupObject", True)}
+        objects = [_obj("Lettuce", 1.0, visible=False, step=3,
+                        display="LettuceSliced", state={"isSliced": True})]
+        return hinter.update(_meta(objects), acts, "LettuceSliced", 3)
+
+    block = _with_action_channel(run)
     assert "LettuceSliced" in block, block
     assert "已切" in block, block
 
 
 def test_put_destination_is_not_promoted():
-    hinter = TargetHinter(task_description="put the apple in the fridge")
-    acts = {"CounterTop": (3, "PutObject", True)}
-    objects = [_obj("CounterTop", 1.0, visible=False, step=3)]
-    block = hinter.update(_meta(objects), acts, "", 4)
+    def run():
+        hinter = TargetHinter(task_description="put the apple in the fridge")
+        acts = {"CounterTop": (3, "PutObject", True)}
+        objects = [_obj("CounterTop", 1.0, visible=False, step=3)]
+        return hinter.update(_meta(objects), acts, "", 4)
+
+    block = _with_action_channel(run)
     assert "CounterTop" not in block, block
 
 
-def test_action_channel_has_a_switch():
-    os.environ["LIGHTWM_TARGET_FROM_ACTION"] = "0"
-    try:
-        hinter = TargetHinter(task_description="slice all the vegetables")
-        block = hinter.update(_meta([_obj("Lettuce", 1.0, visible=False)]),
-                              {"Lettuce": (1, "SliceObject", True)}, "", 2)
-    finally:
-        del os.environ["LIGHTWM_TARGET_FROM_ACTION"]
+def test_action_channel_is_off_unless_asked_for():
+    """The released configuration must not promote an object just because the
+    agent touched it: it knows what it just did, and a chance interaction
+    would otherwise be re-reported (and walked back to) for the whole episode."""
+    hinter = TargetHinter(task_description="slice all the vegetables")
+    block = hinter.update(_meta([_obj("Lettuce", 1.0, visible=False)]),
+                          {"Lettuce": (1, "SliceObject", True)}, "", 2)
     assert "Lettuce" not in block, block
+    assert hinter.from_action is False
 
 
 def test_the_ai2thor03001_case_is_no_longer_silent():
     """End to end on the task that lost with an empty memory block."""
-    hinter = TargetHinter(
-        task_description="I'm hungry, so I want to slice all the vegetables "
-                         "in front of me.")
-    acts = {"Lettuce": (1, "SliceObject", True)}
-    block = hinter.update(
-        _meta([_obj("Lettuce", 0.9, visible=False, step=1,
-                    display="LettuceSliced", state={"isSliced": True}),
-               _obj("Tomato", 0.9, visible=True, step=1)]),
-        acts, "", 2)
+    def run():
+        hinter = TargetHinter(
+            task_description="I'm hungry, so I want to slice all the "
+                             "vegetables in front of me.")
+        acts = {"Lettuce": (1, "SliceObject", True)}
+        return hinter.update(
+            _meta([_obj("Lettuce", 0.9, visible=False, step=1,
+                        display="LettuceSliced", state={"isSliced": True}),
+                   _obj("Tomato", 0.9, visible=True, step=1)]),
+            acts, "", 2)
+
+    block = _with_action_channel(run)
     assert block.strip(), "the block is still empty"
     assert "LettuceSliced" in block, block
     # 视野内那一行只列任务相关物体：Tomato 被检测到了但不是相关物体。
