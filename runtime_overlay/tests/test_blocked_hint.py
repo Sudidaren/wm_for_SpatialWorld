@@ -71,38 +71,30 @@ def test_not_blocked_still_gives_the_nav_suggestion():
     assert "建议先转向它再靠近" in block, block
 
 
-def test_blocked_text_names_exactly_one_action():
+def test_blocked_text_teaches_repositioning_not_turning():
     block = _probe().update(wm_metadata=_meta(), action_name="MoveAhead",
                             blocked=True, action_ok=False)
-    # 只有一个转身动作，且不再并列两个方向让模型自己拼
-    assert "下一步只做这一件事" in block, block
-    got = [d for d in ("RotateLeft(90)", "RotateRight(90)") if d in block]
-    assert len(got) == 1, (got, block)
+    # 教的是"换位置"（横挪/后退），不是"原地转身"
+    assert "MoveLeft" in block and "MoveRight" in block, block
+    assert "MoveBack" in block, block
+    assert "原地转身没用" in block, block
+    # 不再像原来那样一次并列三个动作让模型自己拼
     assert "再 MoveAhead" not in block, block
 
 
-def test_consecutive_blocked_alternates_the_direction():
-    p = _probe()
-    first = p.update(wm_metadata=_meta(), action_name="MoveAhead",
-                     blocked=True, action_ok=False)
-    second = p.update(wm_metadata=_meta(), action_name="MoveAhead",
-                      blocked=True, action_ok=False)
-    a = "RotateLeft(90)" if "RotateLeft(90)" in first else "RotateRight(90)"
-    b = "RotateLeft(90)" if "RotateLeft(90)" in second else "RotateRight(90)"
-    assert a != b, (first, second)
+def test_blocked_text_does_not_hardcode_one_direction():
+    """写死一个方向会把模型推去撞另一面墙 —— 左右都要给。"""
+    block = _probe().update(wm_metadata=_meta(), action_name="MoveAhead",
+                            blocked=True, action_ok=False)
+    assert "MoveLeft" in block and "MoveRight" in block, block
 
 
-def test_streak_resets_after_a_normal_step():
-    p = _probe()
-    first = p.update(wm_metadata=_meta(), action_name="MoveAhead",
-                     blocked=True, action_ok=False)
-    p.update(wm_metadata=_meta(), action_name="MoveAhead",
-             blocked=False, action_ok=True)
-    again = p.update(wm_metadata=_meta(), action_name="MoveAhead",
-                     blocked=True, action_ok=False)
-    a = "RotateLeft(90)" if "RotateLeft(90)" in first else "RotateRight(90)"
-    b = "RotateLeft(90)" if "RotateLeft(90)" in again else "RotateRight(90)"
-    assert a == b, (first, again)
+def test_blocked_advice_matches_the_measured_best_actions():
+    """建议的动作必须是量出来的那三种（真实数据里脱困率 91~97%）。"""
+    block = _probe().update(wm_metadata=_meta(), action_name="MoveAhead",
+                            blocked=True, action_ok=False)
+    # 转身是实测最差的一档（42~46%），不能作为推荐动作出现
+    assert "RotateLeft(90)" not in block and "RotateRight(90)" not in block, block
 
 
 def test_blocked_suppresses_the_reach_hint_but_keeps_it_otherwise():

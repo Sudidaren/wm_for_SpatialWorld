@@ -133,17 +133,20 @@ class MemoryProbe:
             if held:
                 parts.append(f"手持：{held}")
             if blocked:
-                # 语气要硬、只给一个动作：原来的"先 RotateLeft(90)/
-                # RotateRight(90) 再 MoveAhead"一次给三个动作让模型自己拼，
-                # 实测 301 次里只有 36% 下一步真的转身。方向按连续被挡次数
-                # 交替，免得两次建议互相抵消。
+                # 建议哪种动作是量出来的，不是拍脑袋：真实跑批里撞墙之后
+                #   MoveLeft 97%(n=73) / MoveBack 97%(n=31) / MoveRight 91%(n=74)
+                #   RotateLeft 46%(n=112) / RotateRight 42%(n=124)
+                #   LookDown 0%(n=7) / 原地 Pickup 33%(n=33，画面根本没变)
+                # 转身是最差的一档 —— 它不改变位置，障碍还在原处，转完再走
+                # 又被挡。所以这里教"挪"和"退"，并点明转身为什么没用。
+                # 具体往哪边不写死（写死会把模型推去撞另一面墙）。
                 self._blocked_streak += 1
-                turn = "RotateRight" if self._blocked_streak % 2 else "RotateLeft"
                 parts.append(
-                    f"移动提示：⚠ 上一步被挡住了——画面完全没有发生变化，"
-                    f"那个方向走不通，继续走是浪费时间。"
-                    f"下一步只做这一件事：{turn}(90)，"
-                    f"转过身再从别的方向走"
+                    "移动提示：⚠ 上一步被挡住了——画面完全没有发生变化，"
+                    "那个方向走不通，继续走是浪费时间。注意：**原地转身没用**，"
+                    "人还在原地、障碍还在前面。要换的是位置：横着往左挪一步"
+                    "（MoveLeft）、往右挪一步（MoveRight），或者先后退一步"
+                    "（MoveBack），再朝目标走"
                 )
             else:
                 self._blocked_streak = 0

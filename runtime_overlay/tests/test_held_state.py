@@ -120,6 +120,29 @@ def test_holding_without_seeing_does_not_stay_a_navigation_target():
     assert "记住的位置" not in block, block
 
 
+def test_a_held_object_is_not_given_a_position_in_the_view_line():
+    """手拿的东西不要报位置 —— 只报「手持：X」。
+
+    手上那个物体的距离是贴着相机测出来的（实测报成"正前方约 0.3m"），
+    再让 target_priority 把它列进「视野内：X（约 0.3m）」，等于让模型去找
+    自己手里那个东西。
+    """
+    wm = _wm_with_egg(1.2)
+    _pickup(wm, visible=False, action_ok=True)
+    assert wm._holding is not None
+    md = wm._to_metadata({"x": 0.0, "y": 0.0, "z": 0.0},
+                         {"x": 0.0, "y": 0.0, "z": 0.0}, {"det|Egg|0"})
+    # 让它这一帧"看得见"，模拟刚拿起时检测器偶尔还抓得到的情况
+    for obj in md["objects"]:
+        if obj["objectType"] == "Egg":
+            obj["visible"] = True
+            obj["distance"] = 0.3
+    hinter = TargetHinter(task_description="Take the egg out of the fridge.")
+    block = hinter.update(md, {}, "Egg", 4)
+    assert "手持" not in block or "Egg" not in block.split("手持")[0], block
+    assert "视野内" not in block, block
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in sorted(globals().items()):

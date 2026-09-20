@@ -635,6 +635,11 @@ class TargetHinter:
         names_line = []
         for tp, obj in sorted(by_type.items(),
                               key=lambda kv: float(kv[1].get("distance") or 1e9)):
+            if holding and tp == holding:
+                # 拿在手上的东西不报位置：「手持：X」那行已经说了，再报一次
+                # "X（正前方约 0.3m）"等于让模型去找自己手里那个东西，而且
+                # 手上物体的距离本来就测不准（贴着相机）。
+                continue
             if not obj.get("visible"):
                 continue
             if not self.visible_all and tp not in wanted:
