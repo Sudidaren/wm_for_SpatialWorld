@@ -397,6 +397,11 @@ def test_stuck_hint_fires_once_per_stuck_episode():
     p.update(**args)
     third = p.update(**args)
     assert "重复提示" in third, third
+    # 措辞必须与逻辑一致：触发条件是"最近 6 步里该动作最近 3 次都失败"，
+    # **不要求连续**（实测 137 次触发里 0 次是真连续）。写成"已连续 3 次"
+    # 等于向模型陈述一个 100% 不成立的假事实。
+    assert "最近 3 次" in third, third
+    assert "已连续" not in third, third
     fourth = p.update(**args)
     assert "重复提示" not in fourth, fourth   # 同一个卡死状态不反复念
 

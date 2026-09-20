@@ -161,6 +161,12 @@ class MemoryProbe:
             # ③ 卡死纠错：同一个动作连续 3 次没让画面变化 -> 换策略。
             #    每次"卡死"只提示一次（动作变了或成功了就重新武装），并且
             #    只给一句、不引入新概念，避免变成噪声。
+            #    注意触发条件**不是**"连续三次"：它在最近 6 步里找出该动作的
+            #    出现位置，只要最近 3 次出现都失败了就算（允许中间插别的动作）。
+            #    实测 137 次触发里 **0 次** 是真的背靠背三次同动作 —— 模型的行
+            #    为是"撞一下、转一下、再撞一下"。而旧文案写的是"已连续 3 次"，
+            #    等于向模型陈述一个假事实（100% 不成立）。措辞改成"最近 3 次"，
+            #    与逻辑一致；如果改成真连续，这条通道会直接变成死代码（0 次）。
             if action_name and os.environ.get("LIGHTWM_STUCK_HINT", "1") != "0":
                 name = str(action_name)
                 self._recent.append((name, action_ok))
@@ -171,11 +177,11 @@ class MemoryProbe:
                     self._stuck_for = name
                     if name in _MOVE_ACTIONS:
                         parts.append(
-                            f"重复提示：{name} 已连续 3 次没有改变画面——"
+                            f"重复提示：最近 3 次 {name} 都没有改变画面——"
                             f"换成先 RotateLeft(90)/RotateRight(90) 环视，再从别的方向靠近，不要继续重复")
                     else:
                         parts.append(
-                            f"重复提示：{name} 已连续 3 次没有成功——"
+                            f"重复提示：最近 3 次 {name} 都没有成功——"
                             f"先确认目标就在视野内并走到 1m 以内，或者换一个目标物")
                 elif not stuck:
                     self._stuck_for = None

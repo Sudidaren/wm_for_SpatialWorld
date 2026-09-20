@@ -312,11 +312,15 @@ class TargetHinter:
         self._last_pose: Optional[Tuple[float, float, float]] = None
         #: last step's distance to the nearest not-visible relevant object, so
         #: the advice line can say "you are moving away" when that is true.
-        #: 上一次给出"建议先转向它再靠近"时的 (物体类型, 距离)。
+        #: 上一次给出"建议先转向它再靠近"时的 (物体类型, 距离, 锚点步号)。
         #: 必须带上物体类型：只存距离的话，两次建议指向不同物体时就会拿
         #: A 的距离去和 B 的距离比，然后说"你在远离它"。实测 616 次
         #: "你在远离它" 里有 167 次（27%）是这种跨物体比较。
-        self._last_gap: Optional[Tuple[str, float]] = None
+        #: 还要带上锚点步号（last_seen_step）：两次的锚点相同，说明物体位置
+        #: 没有被重新观测刷新过，那么距离差**只来自 agent 自己的移动**
+        #: （里程计精确到 0.0000m），完全不受深度噪声影响。锚点被刷新过的
+        #: 就不比 —— 那才是"靠赌"。
+        self._last_gap: Optional[Tuple[str, float, int]] = None
 
     # -- the model's own object list ---------------------------------
     def entries(self) -> List[Tuple[str, str]]:
@@ -617,7 +621,8 @@ class TargetHinter:
             if row["tier"] == 1 and dist is not None:
                 rows_gap.append((float(dist), tp, word))
                 if nav_best is None or float(dist) < nav_best[0]:
-                    nav_best = (float(dist), len(lines) - 1, tp)
+                    nav_best = (float(dist), len(lines) - 1, tp,
+                                int(obj.get("last_seen_step") or -1))
 
         # ② 导航建议：贴在"看不见的那个最近的任务目标"那一行的末尾。
         #    不另起一行——同一段文字里说两遍位置只会给模型添负担。
@@ -626,16 +631,23 @@ class TargetHinter:
         if (os.environ.get("LIGHTWM_NAV_HINT", "1") != "0"
                 and not suppress_nav):
             if nav_best is not None:
-                dist, idx, tp_now = nav_best
+                dist, idx, tp_now, seen_now = nav_best
                 tail = ""
-                # 只有**上一次建议的也是同一个物体**时，两次距离才可比。
+                # 三个条件缺一不可：
+                #   1) 上一次建议的也是同一个物体（否则是在拿 A 比 B）；
+                #   2) 这两步之间物体的锚点没被重新观测刷新（seen_now 相同），
+                #      这样距离差只来自里程计，是精确的；
+                #   3) 增量 >= 0.15m —— 打印只有 1 位小数，增量小于 0.1m 时
+                #      四舍五入后会出现"上一步 0.5m → 现在 0.5m"这种自相矛盾
+                #      （实测 28 次）。0.15m 以上保证两个显示值必定不同。
                 if (self._last_gap is not None
                         and self._last_gap[0] == tp_now
-                        and dist > self._last_gap[1] + 0.05):
+                        and self._last_gap[2] == seen_now
+                        and dist >= self._last_gap[1] + 0.15):
                     tail = (f"（注意：你在远离它，上一步 "
                             f"{self._last_gap[1]:.1f}m → 现在 {dist:.1f}m）")
                 lines[idx] += f"——建议先转向它再靠近{tail}"
-                self._last_gap = (tp_now, dist)
+                self._last_gap = (tp_now, dist, seen_now)
             else:
                 self._last_gap = None
 

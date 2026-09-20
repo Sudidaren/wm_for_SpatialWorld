@@ -224,6 +224,34 @@ def test_far_away_tail_still_fires_for_the_same_object():
     assert "你在远离它" in text, text
 
 
+def test_far_away_tail_needs_an_unrefreshed_anchor():
+    """锚点被重新观测刷新过就不比 —— 那时差值里混着深度噪声，比不得。
+
+    只有两次的 last_seen_step 相同，才说明两边量的是同一个锚点，距离差
+    只来自 agent 自己的移动（里程计精确），这时提醒才是可信的。
+    """
+    h = tp.TargetHinter("open the laptop")
+    h.update(meta([obj("Laptop", dist=1.0, x=0.0, z=1.0, last=1)]), {}, "", 1)
+    # 同一个物体、距离也变大了，但中间重新看到过它（last 从 1 变成 2）
+    text = h.update(meta([obj("Laptop", dist=1.8, x=0.0, z=1.8, last=2)]),
+                    {}, "", 2)
+    assert "你在远离它" not in text, text
+
+
+def test_far_away_tail_cannot_print_the_same_distance_twice():
+    """增量必须大到两个显示值一定不同（打印只有 1 位小数）。
+
+    实测有 28 条提示写成"你在远离它，上一步 0.5m → 现在 0.5m" —— 阈值
+    0.05m 小于显示精度 0.1m。增量 >=0.15m 时两个一位小数必定不同。
+    """
+    h = tp.TargetHinter("open the laptop")
+    h.update(meta([obj("Laptop", dist=0.46, x=0.0, z=0.46, last=1)]),
+             {}, "", 1)
+    text = h.update(meta([obj("Laptop", dist=0.52, x=0.0, z=0.52, last=1)]),
+                    {}, "", 2)
+    assert "你在远离它" not in text, text      # 0.5 -> 0.5 这种一律不发
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
