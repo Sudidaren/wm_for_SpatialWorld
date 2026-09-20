@@ -32,9 +32,13 @@ URL = "https://apic1.ohmycdn.com/v1/chat/completions"
 KEY = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
 INTERVAL = 600
 LOG = "/mnt/d/lightwm_out/gateway_watchdog.log"
-STATE = "/mnt/d/lightwm_out/gateway_resumed.flag"
+STATE = "/mnt/d/lightwm_out/gateway_state.txt"
 LOCAL_ENV = "/mnt/d/lightwm_out/local_env_wm_gemini31pro_fix_rest156.sh"
 SWE = "/home/sudidaren/spatialworld_eval"
+LOCAL_RUN = "wm_gemini31pro_fix_rest156"
+GPT5_RUN = "wm_gpt5_ai2thor_fail250"
+#: 连续多少次坏响应才判定"又断了"（防抖：别被单次抖动来回切）
+BAD_STREAK = 2
 
 
 def say(msg: str) -> None:
@@ -96,23 +100,64 @@ def resume() -> None:
         c.close()
     except Exception as exc:                       # noqa: BLE001
         say(f"gpt5 卡恢复失败: {type(exc).__name__}: {exc}")
+    set_state("running")
+
+
+def set_state(s: str) -> None:
     with open(STATE, "w", encoding="utf-8") as fh:
-        fh.write(time.strftime("%F %T") + "\n")
+        fh.write(f"{s} {time.strftime('%F %T')}\n")
+
+
+def get_state() -> str:
+    try:
+        with open(STATE, encoding="utf-8") as fh:
+            return fh.read().split()[0]
+    except Exception:                              # noqa: BLE001
+        return "paused"
+
+
+def pause_all() -> None:
+    """网关又不可用：把两条线停掉（结果不删，续跑会重排未成功的）。"""
+    say("网关又不可用，暂停两条线")
+    here = os.path.dirname(os.path.abspath(__file__))
+    say(sh(f"bash {here}/pause_local_run.sh {LOCAL_RUN}")[-300:])
+    from newcard import CARDS
+    import paramiko
+    host, port, pwd = CARDS["gpt5"]
+    try:
+        c = paramiko.SSHClient()
+        c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        c.connect(host, port=port, username="root", password=pwd, timeout=30)
+        _in, out, _err = c.exec_command(f"bash /root/stop_run.sh {GPT5_RUN}",
+                                        timeout=300)
+        say("gpt5 卡: " + out.read().decode("utf-8", "replace")[-200:])
+        c.close()
+    except Exception as exc:                       # noqa: BLE001
+        say(f"gpt5 卡停止失败: {type(exc).__name__}: {exc}")
+    set_state("paused")
 
 
 def main() -> None:
-    say(f"看门狗启动（每 {INTERVAL}s 探一次）")
+    say(f"看门狗启动（每 {INTERVAL}s 探一次，当前状态={get_state()}）")
+    bad = 0
     while True:
-        if os.path.exists(STATE):
-            say("已恢复过，退出")
-            return
         cg, bg = probe("gemini-3.1-pro-preview",
                        {"temperature": 1.0, "top_p": 0.9})
         c5, b5 = probe("gpt-5", {"temperature": 1.0})
-        say(f"gemini http={cg} {bg[:90]!r} | gpt-5 http={c5} {b5[:90]!r}")
-        if cg == 200 and c5 == 200:
+        state = get_state()
+        say(f"[{state}] gemini http={cg} {bg[:80]!r} | gpt-5 http={c5} {b5[:80]!r}")
+        ok = cg == 200 and c5 == 200
+        if state == "paused" and ok:
+            bad = 0
             resume()
-            return
+        elif state == "running" and not ok:
+            bad += 1
+            say(f"坏响应连续 {bad}/{BAD_STREAK}")
+            if bad >= BAD_STREAK:
+                bad = 0
+                pause_all()
+        else:
+            bad = 0
         time.sleep(INTERVAL)
 
 
