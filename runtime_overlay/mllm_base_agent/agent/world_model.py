@@ -47,6 +47,11 @@ HORIZON_LIMIT = 60.0
 #: LookUp/LookDown without an explicit angle move by this much.
 DEFAULT_LOOK_DEGREES = 30.0
 
+#: AI2-THOR 的 PickupObject 伸手范围（米）。用于"东西是不是被拿到手了"的兜底判定。
+#: 只有在帧差确认这一步确实生效（action_ok 为真）时才用这个上限；帧差未知时
+#: 仍然用严格的手边距离，避免把"没拿到"误记成"拿到了"。
+PICKUP_REACH = 1.5
+
 
 def camera_basis(yaw: float, horizon: float = 0.0):
     """Return (forward, right, up) unit vectors in the world frame.
@@ -968,18 +973,34 @@ class WorldModel:
 
         # ---- 2) hand state ---------------------------------------------------
         if action_name == "PickupObject" and object_type:
-            nearest, best = None, 1e9
-            for oid in self._slots_of_type(object_type, visible_ids):
-                s = self._slots.get(oid)
-                if s is None:
-                    continue
-                if ax is None or az is None:
-                    continue
-                d = math.hypot(s["pos"][0] - ax, s["pos"][2] - az)
-                if d < best:
-                    nearest, best = oid, d
-            # an object held in the hand is ~0.3-0.6 m from the agent body
-            if nearest is not None and best <= 0.7:
+            def _nearest(cands):
+                o_id, o_best = None, 1e9
+                for oid in cands:
+                    s = self._slots.get(oid)
+                    if s is None or ax is None or az is None:
+                        continue
+                    d = math.hypot(s["pos"][0] - ax, s["pos"][2] - az)
+                    if d < o_best:
+                        o_id, o_best = oid, d
+                return o_id, o_best
+
+            # (a) 这一帧还看得见它、而且就在手边 —— 最可信的一条。
+            nearest, best = _nearest(
+                self._slots_of_type(object_type, visible_ids))
+            if nearest is None or best > 0.7:
+                # (b) 看不见了。**这是拿在手上的常态，不是例外**：手在画面
+                #     底部、常被身体挡住，检测器基本抓不到手里那个东西。
+                #     2026-09-20 的 311 批里，20 个"Hand already has an
+                #     object"的任务有 14 个 WM 一次都没记到手持有，129 局里
+                #     只有 30 局报过"手持"。
+                #     退一步用"最近一次看到它就在伸手范围内"来判断；只在帧差
+                #     确认这一步确实生效时才放宽到 PICKUP_REACH，帧差未知
+                #     （目标没完全入画）时仍旧按手边距离，宁可不记也不记错。
+                nearest, best = _nearest(self._slots_of_type(object_type))
+                limit = PICKUP_REACH if action_ok else 0.7
+                if nearest is None or best > limit:
+                    nearest = None
+            if nearest is not None:
                 self._holding = nearest
                 self._remember_variant(object_type)
         elif action_name in ("PutObject", "DropHandObject", "ThrowObject"):
