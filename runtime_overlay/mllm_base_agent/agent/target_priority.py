@@ -312,7 +312,11 @@ class TargetHinter:
         self._last_pose: Optional[Tuple[float, float, float]] = None
         #: last step's distance to the nearest not-visible relevant object, so
         #: the advice line can say "you are moving away" when that is true.
-        self._last_gap: Optional[float] = None
+        #: 上一次给出"建议先转向它再靠近"时的 (物体类型, 距离)。
+        #: 必须带上物体类型：只存距离的话，两次建议指向不同物体时就会拿
+        #: A 的距离去和 B 的距离比，然后说"你在远离它"。实测 616 次
+        #: "你在远离它" 里有 167 次（27%）是这种跨物体比较。
+        self._last_gap: Optional[Tuple[str, float]] = None
 
     # -- the model's own object list ---------------------------------
     def entries(self) -> List[Tuple[str, str]]:
@@ -613,7 +617,7 @@ class TargetHinter:
             if row["tier"] == 1 and dist is not None:
                 rows_gap.append((float(dist), tp, word))
                 if nav_best is None or float(dist) < nav_best[0]:
-                    nav_best = (float(dist), len(lines) - 1)
+                    nav_best = (float(dist), len(lines) - 1, tp)
 
         # ② 导航建议：贴在"看不见的那个最近的任务目标"那一行的末尾。
         #    不另起一行——同一段文字里说两遍位置只会给模型添负担。
@@ -622,13 +626,16 @@ class TargetHinter:
         if (os.environ.get("LIGHTWM_NAV_HINT", "1") != "0"
                 and not suppress_nav):
             if nav_best is not None:
-                dist, idx = nav_best
+                dist, idx, tp_now = nav_best
                 tail = ""
+                # 只有**上一次建议的也是同一个物体**时，两次距离才可比。
                 if (self._last_gap is not None
-                        and dist > self._last_gap + 0.05):
-                    tail = f"（注意：你在远离它，上一步 {self._last_gap:.1f}m → 现在 {dist:.1f}m）"
+                        and self._last_gap[0] == tp_now
+                        and dist > self._last_gap[1] + 0.05):
+                    tail = (f"（注意：你在远离它，上一步 "
+                            f"{self._last_gap[1]:.1f}m → 现在 {dist:.1f}m）")
                 lines[idx] += f"——建议先转向它再靠近{tail}"
-                self._last_gap = dist
+                self._last_gap = (tp_now, dist)
             else:
                 self._last_gap = None
 

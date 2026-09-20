@@ -200,6 +200,30 @@ def test_exact_mode_emits_no_never_seen_lines():
     assert "没见过" not in text, text
 
 
+def test_far_away_tail_only_compares_the_same_object():
+    """「你在远离它」不能拿 A 物体的距离去比 B 物体的距离。
+
+    实测 616 次"你在远离它"里有 167 次（27%）是跨物体比较 —— 上一步建议
+    靠近 Egg，这一步的候选换成 Microwave，两个不同的距离一减就宣布
+    "你在远离它"。所以只有指向同一个物体时才可以比较。
+    """
+    h = tp.TargetHinter("open the laptop and turn on the desk lamp")
+    # 第一步：最近的任务目标是 Laptop(1.0m)
+    h.update(meta([obj("Laptop", dist=1.0, x=0.0, z=1.0),
+                   obj("DeskLamp", dist=3.0, x=0.0, z=3.0)]), {}, "", 1)
+    # 第二步：最近的目标换成了另一个物体，而且更远 —— 必须**不**报"远离"
+    text = h.update(meta([obj("DeskLamp", dist=2.5, x=0.0, z=2.5)]), {}, "", 2)
+    assert "你在远离它" not in text, text
+
+
+def test_far_away_tail_still_fires_for_the_same_object():
+    """同一个物体、确实变远了 —— 这条提醒要保留（别把功能改没了）。"""
+    h = tp.TargetHinter("open the laptop")
+    h.update(meta([obj("Laptop", dist=1.0, x=0.0, z=1.0)]), {}, "", 1)
+    text = h.update(meta([obj("Laptop", dist=1.8, x=0.0, z=1.8)]), {}, "", 2)
+    assert "你在远离它" in text, text
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
