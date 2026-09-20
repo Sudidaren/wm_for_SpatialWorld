@@ -34,6 +34,12 @@ CARD_RUNS = {
 }
 LOCAL_RUN = "/home/sudidaren/spatialworld_eval/runs/wm_gemini31pro_fix_rest156"
 
+#: 2026-09-21 01:33 起：网关 key 额度用尽（401 maximum fee exceeded，随后
+#: chat/completions 被临时封 429），本机的 Gemini+WM 与云上 gpt5 两条线按
+#: harness 第 4 条**主动暂停**，等 gateway_watchdog.py 探到恢复再自动续跑。
+#: 暂停期间不告警，只标记，免得淹掉真正的问题。
+PAUSED = {"gpt5", "local"}
+
 PROBE = r"""
 RUN="$1"; NEED_VLLM="$2"
 echo -n "sup=";  pgrep -cf "[.]venv/bin/python -u - .* $RUN " || true
@@ -100,6 +106,9 @@ def probe_card(tag: str) -> str:
             k, _, v = line.partition("=")
             parts[k.strip()] = v.strip()
     warn = []
+    if parts.get("sup") == "0" and tag in PAUSED:
+        return (f"{tag}: PAUSED（等网关恢复） 判定={parts.get('decided')}"
+                f"/{parts.get('rows')} 成功={parts.get('success')}")
     if parts.get("sup") == "0":
         warn.append("supervisor 没了")
     if parts.get("orphan", "0") not in ("0", ""):
@@ -153,6 +162,10 @@ def probe_local() -> str:
             mem[k] = int(line.split()[1]) / 1024 / 1024
     avail_pct = mem.get("MemAvailable", 0) / max(mem.get("MemTotal", 1), 1) * 100
     warn = []
+    if "local" in PAUSED:
+        return (f"local: PAUSED（等网关恢复） 判定={decided}/{rows} 成功={success} "
+                f"load={load:.1f}/{os.cpu_count()} "
+                f"内存可用={mem.get('MemAvailable', 0):.1f}G({avail_pct:.0f}%)")
     if worker == "0":
         warn.append("worker 全停")
     if load > os.cpu_count() * 0.95:

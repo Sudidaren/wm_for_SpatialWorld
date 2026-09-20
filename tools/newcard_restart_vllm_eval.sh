@@ -12,17 +12,21 @@
 #   4. 用抓到的环境原样重启评测（supervisor 会重排未成功/外部失败的任务）。
 set -uo pipefail
 
-RUN="${1:?用法: restart_vllm_eval.sh <RUN_NAME> <UTIL> [MODEL_DIR] [SERVED_NAME] [WORKERS]}"
-UTIL="${2:?用法: restart_vllm_eval.sh <RUN_NAME> <UTIL> [MODEL_DIR] [SERVED_NAME] [WORKERS]}"
+RUN="${1:?用法: restart_vllm_eval.sh <RUN_NAME> <UTIL> [MODEL_DIR] [SERVED_NAME] [WORKERS] [API_KEY]}"
+UTIL="${2:?用法: restart_vllm_eval.sh <RUN_NAME> <UTIL> [MODEL_DIR] [SERVED_NAME] [WORKERS] [API_KEY]}"
 MODEL_ARG="${3:-}"
 NAME_ARG="${4:-}"
 WORKERS_ARG="${5:-}"
+KEY_ARG="${6:-EMPTY}"        # 本地 vLLM 不校验 key
 SWE=/home/sudidaren/spatialworld_eval
 ENVF="/root/autodl-tmp/eval_env_${RUN}.sh"
 LOGD=/root/autodl-tmp/logs
 MAINLOG="/root/autodl-tmp/${RUN}_main.log"
 
-export DISPLAY=:99 TMPDIR_OVERRIDE=/tmp/lightwm_tmp
+# AI2THOR_SERVER_TIMEOUT 必须显式给：软件渲染下大场景用默认的 100s 会成批
+# 超时（2026-09-21 踩过——重启时漏了这个变量，8b 卡上立刻多出一批
+# "Reading from AI2-THOR backend timed out (using 100.0s)"）。
+export DISPLAY=:99 TMPDIR_OVERRIDE=/tmp/lightwm_tmp AI2THOR_SERVER_TIMEOUT=300
 say() { echo "[vrestart $(date '+%F %T')] $*"; }
 
 PAT="[.]venv/bin/python -u - .* ${RUN} "
@@ -30,9 +34,23 @@ P=$(pgrep -f "$PAT" | head -1 || true)
 if [ -z "${P:-}" ]; then say "找不到 ${RUN} 的 supervisor，退出"; exit 1; fi
 
 # 1) 抓环境
-tr '\0' '\n' < "/proc/$P/environ" \
+# 注意：卡上 /proc/<pid>/environ 有时读出来是 0 字节（实测），抓不到就退回
+# 从 supervisor 的 argv 重建（argv = <model> <url> wm <RUN> <SCENES> <WORKERS>）。
+tr '\0' '\n' < "/proc/$P/environ" 2>/dev/null \
     | grep -E '^(MODEL_NAME|BASE_URL|PROFILE|RUN_NAME|SCENES|WORKERS|LLM_API_KEY|OPENAI_API_KEY)=' \
-    > "$ENVF"
+    > "$ENVF" || true
+if ! grep -q '^MODEL_NAME=' "$ENVF"; then
+    say "/proc environ 读不到，改从 argv 重建"
+    ARGV=$(ps -o args= -p "$P")
+    M=$(printf '%s\n' "$ARGV" | awk '{for(i=1;i<=NF;i++) if($i=="-"){print $(i+1); exit}}')
+    U=$(printf '%s\n' "$ARGV" | awk '{for(i=1;i<=NF;i++) if($i=="-"){print $(i+2); exit}}')
+    R2=$(printf '%s\n' "$ARGV" | awk '{for(i=1;i<=NF;i++) if($i=="-"){print $(i+4); exit}}')
+    S=$(printf '%s\n' "$ARGV" | awk '{for(i=1;i<=NF;i++) if($i=="-"){print $(i+5); exit}}')
+    W=$(printf '%s\n' "$ARGV" | awk '{for(i=1;i<=NF;i++) if($i=="-"){print $(i+6); exit}}')
+    printf 'MODEL_NAME=%s\nBASE_URL=%s\nPROFILE=wm\nRUN_NAME=%s\nSCENES=%s\nWORKERS=%s\nLLM_API_KEY=%s\n' \
+        "$M" "$U" "$R2" "$S" "$W" "${KEY_ARG:-EMPTY}" > "$ENVF"
+fi
+export AI2THOR_SERVER_TIMEOUT=300
 chmod 600 "$ENVF"
 say "已抓环境 -> $ENVF"
 # vLLM 的模型目录 / served name 优先用命令行给的（vLLM 可能已经崩了，
