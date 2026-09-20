@@ -101,7 +101,27 @@ def test_blocked_text_rules_nothing_out():
     for banned in ("没用", "别转身", "不能转身", "禁止"):
         assert banned not in block, (banned, block)
     # 但"不要连续重复同一个被挡的动作"这条事实性建议保留
-    assert "不要连续重复" in block, block
+    assert "不要重复同一个动作" in block, block
+
+
+def test_blocked_text_says_continuing_forward_has_no_effect():
+    """事实要说硬：继续走没有效果。"""
+    block = _probe().update(wm_metadata=_meta(), action_name="MoveAhead",
+                            blocked=True, action_ok=False)
+    assert "继续朝那个方向走不会有任何效果" in block, block
+
+
+def test_the_interaction_option_is_conditional():
+    """"也可以做交互"必须带判据，否则会误导。
+
+    实测被挡时模型选交互 62 次，只有 26% 真的改变了画面（74% 空转），
+    PickupObject 更是 28 次空转 / 5 次生效 —— 手里已经有东西，或者目标
+    根本不在视野里。所以这一条必须写成条件句，不能写成许可。
+    """
+    block = _probe().update(wm_metadata=_meta(), action_name="MoveAhead",
+                            blocked=True, action_ok=False)
+    assert "交互" in block, block
+    assert "如果目标已经就在眼前、伸手可及" in block, block
 
 
 def test_blocked_suppresses_the_reach_hint_but_keeps_it_otherwise():
