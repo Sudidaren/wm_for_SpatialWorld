@@ -119,7 +119,7 @@ def main() -> None:
 
         # 被挡住之后模型听不听
         for i, h in enumerate(hints):
-            if '移动没有让画面发生变化' not in h or i + 1 >= n:
+            if '移动提示：' not in h or i + 1 >= n:
                 continue
             nav_after_block[acts[i + 1] in ROTATE] += 1
             if acts[i + 1] not in ROTATE and status != 'success':

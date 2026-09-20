@@ -56,6 +56,9 @@ class MemoryProbe:
         #: 最近几个 (动作, 是否改变了画面)，用于识别"卡死在重复同一个动作"
         self._recent: List[Tuple[str, Optional[bool]]] = []
         self._stuck_for: Optional[str] = None
+        #: 连续被挡的步数。用来在"转身"的两个方向之间交替，避免连续两次
+        #: 建议互相抵消（先左后右回到原地）。
+        self._blocked_streak: int = 0
 
     def set_target_hint(self, cfg: Optional[Dict[str, Any]]) -> None:
         self._target_hint = dict(cfg or {})
@@ -112,7 +115,11 @@ class MemoryProbe:
                         memory_frames=(None if _mf is None else int(_mf)),
                     )
                     self._hinter = hinter
-                block = hinter.update(wm_metadata, self._acts, held0, self._tick)
+                # 被挡住的那一步不给"往哪走"的建议：脱困指令和"建议先转向它
+                # 再靠近"是两条打架的移动指令（实测 36% 的被挡提示同时挂了
+                # 它）。只压这一步；记忆行里的位置与距离照常保留。
+                block = hinter.update(wm_metadata, self._acts, held0, self._tick,
+                                      suppress_nav=bool(blocked))
                 if block:
                     parts.append(block)
             inv = wm_metadata.get("inventoryObjects") or []
@@ -126,11 +133,20 @@ class MemoryProbe:
             if held:
                 parts.append(f"手持：{held}")
             if blocked:
+                # 语气要硬、只给一个动作：原来的"先 RotateLeft(90)/
+                # RotateRight(90) 再 MoveAhead"一次给三个动作让模型自己拼，
+                # 实测 301 次里只有 36% 下一步真的转身。方向按连续被挡次数
+                # 交替，免得两次建议互相抵消。
+                self._blocked_streak += 1
+                turn = "RotateRight" if self._blocked_streak % 2 else "RotateLeft"
                 parts.append(
-                    "移动提示：上一步的移动没有让画面发生变化（多半被挡）。"
-                    "换方向绕行——先 RotateLeft(90)/RotateRight(90) 再 MoveAhead，"
-                    "不要连续重复同一个被挡的动作"
+                    f"移动提示：⚠ 上一步被挡住了——画面完全没有发生变化，"
+                    f"那个方向走不通，继续走是浪费时间。"
+                    f"下一步只做这一件事：{turn}(90)，"
+                    f"转过身再从别的方向走"
                 )
+            else:
+                self._blocked_streak = 0
             # 同理：成功的那一步画面自己会说明，只有失败才值得占 token。
             if action_name and action_ok is False:
                 parts.append(f"上一个动作：{action_name}（失败：画面未变化）")
@@ -160,6 +176,7 @@ class MemoryProbe:
             # ④ 交互失败且目标还太远 -> 直接告诉它还差多少（可执行的数字）
             if (action_name and action_ok is False
                     and str(action_name) not in _MOVE_ACTIONS
+                    and not blocked
                     and os.environ.get("LIGHTWM_REACH_HINT", "1") != "0"
                     and self._hinter is not None):
                 gap = self._hinter.nearest(wm_metadata, visible=True)

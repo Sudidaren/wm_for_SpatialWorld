@@ -431,7 +431,14 @@ class TargetHinter:
 
     def update(self, wm_metadata: Dict,
                acts: Dict[str, Tuple[int, str, Optional[bool]]],
-               holding: str, step: int) -> str:
+               holding: str, step: int,
+               suppress_nav: bool = False) -> str:
+        """``suppress_nav``：这一步不要给"往哪走"的建议。
+
+        被挡住的那一步要用它：脱困指令和"建议先转向它再靠近"是两条互相打架的
+        移动指令（实测 530 次被挡提示里有 193 次同时挂了这条，占 36%）。压掉
+        的只是**这一步**的导航建议，记忆行里的位置和距离照常给。
+        """
         objects = [o for o in (wm_metadata.get("objects") or []) if isinstance(o, dict)]
         if self.memory_frames is not None:
             # Ablation: keep only what the current view supports.  memory_frames
@@ -612,7 +619,8 @@ class TargetHinter:
         #    不另起一行——同一段文字里说两遍位置只会给模型添负担。
         #    候选来自上面的 rows：已经可见的、以及谓词已满足的（比如已经关掉
         #    的那盏灯）都不在内，否则会指使模型再跑一趟。
-        if os.environ.get("LIGHTWM_NAV_HINT", "1") != "0":
+        if (os.environ.get("LIGHTWM_NAV_HINT", "1") != "0"
+                and not suppress_nav):
             if nav_best is not None:
                 dist, idx = nav_best
                 tail = ""
