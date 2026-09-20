@@ -28,7 +28,7 @@
 | `scripts/ai2thor/work/run_task.py` | 归一化 `success_conditions`（复数键 + `success_logic`） | 否则官方 evaluator 走 legacy 分支抛异常，所有任务恒判失败 |
 | `scripts/procthor/work/run_task.py` | 同上（ProcTHOR 侧） | 同上 |
 
-## C. 测试（4 个，新增）
+## C. 测试（7 个，新增）
 
 | 文件 | 覆盖 |
 |---|---|
@@ -37,6 +37,9 @@
 | `tests/test_object_query_loop.py` | 不拦 DONE、只多一次调用、协议只注入一次（9 项） |
 | `tests/test_target_priority.py` | 目标提示分层/配额/降权 + "源码里不得出现对象词表"（10 项） |
 | `tests/test_state_variants.py` | 改名规则来自提示词、变体归并到基类槽位、动作目标并入相关集、`PutObject` 目的地不并入（15 项） |
+| `tests/test_held_state.py` | 手持状态：看不见但够得着（帧差确认）要认、帧差未知/超出伸手范围不认、`Put` 清空、手上东西不再进"视野内"行（8 项） |
+| `tests/test_blocked_hint.py` | 被挡住时压掉打架的移动建议（只压一步）、距离情报保留、事实说硬、走法全列且不下断言、交互选项必须带条件（9 项） |
+| `tests/test_param_provenance.py` | **相机/深度参数红线**：每个旋钮的默认值与声明逐字对齐、来源必须在 {definition, non_eval_rooms, geometry} 内、FOV 约定必须由模拟器定义导出（5 项） |
 
 ## D. phase C 隐物体信念（不随包发布）
 

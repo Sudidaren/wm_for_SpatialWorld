@@ -107,6 +107,7 @@ run_suite "5/6 target hint (no vocabulary)"              "tests/test_target_prio
 run_suite "5/6 state variants (sliced/cracked rename)"   "tests/test_state_variants.py"
 run_suite "5/6 hand state (unseen but held)"             "tests/test_held_state.py"
 run_suite "5/6 blocked move (one instruction only)"      "tests/test_blocked_hint.py"
+run_suite "5/6 parameter provenance (no eval-set fitting)" "tests/test_param_provenance.py"
 
 # ------------------------------------------------------------- 6. summary
 step "6/6 summary"
