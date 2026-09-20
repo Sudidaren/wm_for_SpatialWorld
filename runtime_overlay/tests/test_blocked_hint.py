@@ -71,14 +71,14 @@ def test_not_blocked_still_gives_the_nav_suggestion():
     assert "建议先转向它再靠近" in block, block
 
 
-def test_blocked_text_teaches_repositioning_not_turning():
+def test_blocked_text_offers_every_escape():
     block = _probe().update(wm_metadata=_meta(), action_name="MoveAhead",
                             blocked=True, action_ok=False)
-    # 教的是"换位置"（横挪/后退），不是"原地转身"
-    assert "MoveLeft" in block and "MoveRight" in block, block
-    assert "MoveBack" in block, block
-    assert "原地转身没用" in block, block
-    # 不再像原来那样一次并列三个动作让模型自己拼
+    # 可选的走法都要摆出来：横挪、后退、转身
+    for token in ("MoveLeft", "MoveRight", "MoveBack",
+                  "RotateLeft", "RotateRight"):
+        assert token in block, (token, block)
+    # 不写死方向
     assert "再 MoveAhead" not in block, block
 
 
@@ -87,14 +87,21 @@ def test_blocked_text_does_not_hardcode_one_direction():
     block = _probe().update(wm_metadata=_meta(), action_name="MoveAhead",
                             blocked=True, action_ok=False)
     assert "MoveLeft" in block and "MoveRight" in block, block
+    assert "RotateLeft" in block and "RotateRight" in block, block
 
 
-def test_blocked_advice_matches_the_measured_best_actions():
-    """建议的动作必须是量出来的那三种（真实数据里脱困率 91~97%）。"""
+def test_blocked_text_rules_nothing_out():
+    """WM 报事实，不替模型判定哪个动作一定不行。
+
+    "转身没用 / 别转身"这类断言在真实数据里只是观察性统计（且带选择偏差），
+    写成硬结论既没有依据，也会把模型可用的手段砍掉一半。
+    """
     block = _probe().update(wm_metadata=_meta(), action_name="MoveAhead",
                             blocked=True, action_ok=False)
-    # 转身是实测最差的一档（42~46%），不能作为推荐动作出现
-    assert "RotateLeft(90)" not in block and "RotateRight(90)" not in block, block
+    for banned in ("没用", "别转身", "不能转身", "禁止"):
+        assert banned not in block, (banned, block)
+    # 但"不要连续重复同一个被挡的动作"这条事实性建议保留
+    assert "不要连续重复" in block, block
 
 
 def test_blocked_suppresses_the_reach_hint_but_keeps_it_otherwise():
