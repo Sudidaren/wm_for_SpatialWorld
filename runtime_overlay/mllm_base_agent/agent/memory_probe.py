@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 import os
+import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -51,6 +52,11 @@ class MemoryProbe:
         self._target_hint: Dict[str, Any] = {}
         self._acts: Dict[str, Tuple[int, str, Optional[bool]]] = {}
         self._tick: int = 0
+        #: 提示装配过程中抛出的异常次数。**这个数不能永远是 0 而不被发现**：
+        #: 任何内部异常都会让这一步的提示变成空串，表现是"WM 在跑但一个字都
+        #: 不说"。2026-09-20 就发生过一次（删属性时漏删了两处使用），当时靠
+        #: 二十多个单测同时报错才抓到。见 update() 末尾的处理。
+        self.errors: int = 0
         self._hinter = None
         self._vlm = None                # 模型自己；用于开局自述任务物品
 
@@ -184,9 +190,19 @@ class MemoryProbe:
                     f"距离提示：{reach_gap[0]} 在{reach_gap[2]}约 {reach_gap[1]:.1f}m，"
                     f"要先走到 1m 以内才能交互"
                     f"（还差约 {reach_gap[1] - _REACH_M:.1f}m）")
-        except Exception:
-            import os as _os
-            if _os.environ.get("WM_DEBUG"):
+        except Exception as exc:                      # noqa: BLE001
+            # 兜底不能是"静音"。这里吞掉的任何异常都等于这一步不注入，而
+            # 外部看起来完全正常（进程健在、任务照跑、只是 WM 哑了）——
+            # 那是最难查的一类故障。所以：
+            #   * self.errors 记数，调用方/测试可以直接断言它必须是 0；
+            #   * stderr 上留一行（前 3 次都留，之后每 50 次留一次，避免刷屏）；
+            #   * WM_DEBUG=1 时照旧打印完整 traceback。
+            self.errors += 1
+            if self.errors <= 3 or self.errors % 50 == 0:
+                print(f"[WM-ERROR] MemoryProbe.update 第 {self.errors} 次异常，"
+                      f"这一步的提示为空：{type(exc).__name__}: {exc}",
+                      file=sys.stderr, flush=True)
+            if os.environ.get("WM_DEBUG"):
                 import traceback as _tb
                 print("[WM-DEBUG] MemoryProbe.update raised:\n"
                       + _tb.format_exc(), flush=True)

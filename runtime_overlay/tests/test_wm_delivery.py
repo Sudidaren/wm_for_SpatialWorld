@@ -919,6 +919,34 @@ def test_done_is_never_intercepted():
     assert oq.parse_query("MoveAhead(1)") is None
 
 
+def test_an_internal_error_is_counted_and_never_silent():
+    """提示装配出异常时，必须留下痕迹，不能静音。
+
+    这里吞掉的任何异常都等于"这一步不注入"，而外部看起来完全正常 ——
+    进程健在、任务照跑、只是 WM 哑了。2026-09-20 真发生过一次（删属性时
+    漏删两处使用），当时靠二十多个单测同时报错才抓到；如果在真实跑批里，
+    那就是最难查的一类故障。
+    """
+    import contextlib
+    import io
+
+    p = _probe("open the fridge")
+
+    def boom(*_a, **_k):
+        raise RuntimeError("boom")
+
+    p._reach_gap = boom                    # 让 update() 内部炸
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        block = p.update(
+            wm_metadata=meta(objects=[("Fridge", 0.0, 0.9, 2.0, False, 2.0, 0.2)]),
+            action_name="MoveAhead", action_ok=False)
+    assert block == "", block              # 兜底仍然是"这一步不注入"
+    assert p.errors == 1, p.errors         # 但必须被计数
+    assert "WM-ERROR" in err.getvalue(), err.getvalue()
+    assert "boom" in err.getvalue(), err.getvalue()
+
+
 def main():
     print(f"repo: {REPO}")
     print(f"python: {sys.version.split()[0]}\n")
