@@ -53,9 +53,6 @@ class MemoryProbe:
         self._tick: int = 0
         self._hinter = None
         self._vlm = None                # 模型自己；用于开局自述任务物品
-        #: 最近几个 (动作, 是否改变了画面)，用于识别"卡死在重复同一个动作"
-        self._recent: List[Tuple[str, Optional[bool]]] = []
-        self._stuck_for: Optional[str] = None
         #: 连续被挡的步数。用来在"转身"的两个方向之间交替，避免连续两次
         #: 建议互相抵消（先左后右回到原地）。
         self._blocked_streak: int = 0
@@ -158,34 +155,17 @@ class MemoryProbe:
             if action_name and action_ok is False:
                 parts.append(f"上一个动作：{action_name}（失败：画面未变化）")
 
-            # ③ 卡死纠错：同一个动作连续 3 次没让画面变化 -> 换策略。
-            #    每次"卡死"只提示一次（动作变了或成功了就重新武装），并且
-            #    只给一句、不引入新概念，避免变成噪声。
-            #    注意触发条件**不是**"连续三次"：它在最近 6 步里找出该动作的
-            #    出现位置，只要最近 3 次出现都失败了就算（允许中间插别的动作）。
-            #    实测 137 次触发里 **0 次** 是真的背靠背三次同动作 —— 模型的行
-            #    为是"撞一下、转一下、再撞一下"。而旧文案写的是"已连续 3 次"，
-            #    等于向模型陈述一个假事实（100% 不成立）。措辞改成"最近 3 次"，
-            #    与逻辑一致；如果改成真连续，这条通道会直接变成死代码（0 次）。
-            if action_name and os.environ.get("LIGHTWM_STUCK_HINT", "1") != "0":
-                name = str(action_name)
-                self._recent.append((name, action_ok))
-                self._recent = self._recent[-6:]
-                same = [ok for a, ok in self._recent if a == name]
-                stuck = len(same) >= 3 and all(ok is False for ok in same[-3:])
-                if stuck and self._stuck_for != name:
-                    self._stuck_for = name
-                    if name in _MOVE_ACTIONS:
-                        parts.append(
-                            f"重复提示：最近 3 次 {name} 都没有改变画面——"
-                            f"换成先 RotateLeft(90)/RotateRight(90) 环视，再从别的方向靠近，不要继续重复")
-                    else:
-                        parts.append(
-                            f"重复提示：最近 3 次 {name} 都没有成功——"
-                            f"先确认目标就在视野内并走到 1m 以内，或者换一个目标物")
-                elif not stuck:
-                    self._stuck_for = None
-
+            # ③ 卡死纠错（`重复提示`）已于 2026-09-20 删除。证据：
+            #   * 模型本来就在换动作 —— 触发时近 4 步已经用过 2.86 个不同动作
+            #     （普通失败是 3.10），它不是死磕一个动作，是在试；
+            #   * 控制住停滞程度后没有收益 —— 按"近 3 步有效动作数"分层，
+            #     主流层 62%(n=103) vs 对照 60%(n=297)，总体 65% vs 63%；
+            #   * 有副作用 —— 触发后模型下一步转向 MoveBack 19% / LookDown 15%
+            #     / Stand 9%，而 LookDown 的脱困率实测是 0%(n=7)，等于每触发
+            #     一次就有约 1/4 的概率诱发一个无效动作；
+            #   * 它原来还谎称"已连续 3 次"（137 次触发里 0 次真连续）。
+            # 教训：加提示 ≠ 有帮助，得量。这条通道的全部状态机（_recent /
+            # _stuck_for）随它一起删除。
             # ④ 交互失败且目标还太远 -> 直接告诉它还差多少（可执行的数字）
             if (action_name and action_ok is False
                     and str(action_name) not in _MOVE_ACTIONS

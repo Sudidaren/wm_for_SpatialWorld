@@ -388,36 +388,29 @@ def test_nav_advice_skipped_when_the_goal_is_already_satisfied():
     assert "建议：" not in block, block      # 已经关掉了，别再指使模型跑一趟
 
 
-def test_stuck_hint_fires_once_per_stuck_episode():
-    p = _probe("open the fridge")
-    args = dict(wm_metadata=meta(objects=[("Fridge", 0.0, 0.9, 2.0, False, 2.0, 0.2)]),
-                action_name="MoveAhead", action_ok=False)
-    first = p.update(**args)
-    assert "重复提示" not in first, first
-    p.update(**args)
-    third = p.update(**args)
-    assert "重复提示" in third, third
-    # 措辞必须与逻辑一致：触发条件是"最近 6 步里该动作最近 3 次都失败"，
-    # **不要求连续**（实测 137 次触发里 0 次是真连续）。写成"已连续 3 次"
-    # 等于向模型陈述一个 100% 不成立的假事实。
-    assert "最近 3 次" in third, third
-    assert "已连续" not in third, third
-    fourth = p.update(**args)
-    assert "重复提示" not in fourth, fourth   # 同一个卡死状态不反复念
+def test_repeat_hint_is_gone():
+    """`重复提示` 在 2026-09-20 被删掉，而且不许以任何形式回来。
 
-
-def test_stuck_hint_rearms_after_a_success():
+    它在"同一个动作反复失败"时给建议，可是：
+      * 模型本来就在换动作（触发时近 4 步用过 2.86 个不同动作，普通失败 3.10）
+        —— 也就是说它已经在做这条提示让它做的事；
+      * 控制住停滞程度后没有收益：按"近 3 步有效动作数"分层，主流层
+        62%(n=103) vs 对照 60%(n=297)；
+      * 有副作用：触发后模型下一步有 15% 去 LookDown、9% 去 Stand，而
+        LookDown 的脱困率实测 0%(n=7)，等于每触发一次约 1/4 概率诱发无效动作；
+      * 它原来还谎称"已连续 3 次"（137 次触发里 0 次真连续）。
+    教训：加提示 ≠ 有帮助，得量。
+    """
     p = _probe("open the fridge")
     bad = dict(wm_metadata=meta(objects=[("Fridge", 0.0, 0.9, 2.0, False, 2.0, 0.2)]),
                action_name="MoveAhead", action_ok=False)
-    for _ in range(3):
-        p.update(**bad)
+    seen = [p.update(**bad) for _ in range(6)]           # 连撞 6 次
     p.update(wm_metadata=meta(objects=[("Fridge", 0.0, 0.9, 2.0, False, 2.0, 0.2)]),
-             action_name="MoveAhead", action_ok=True)     # 成功一次 -> 重新武装
-    for _ in range(2):
-        p.update(**bad)
-    again = p.update(**bad)
-    assert "重复提示" in again, again
+             action_name="MoveAhead", action_ok=True)    # 中间成功一次
+    seen += [p.update(**bad) for _ in range(3)]
+    for block in seen:
+        assert "重复提示" not in block, block
+        assert "已连续" not in block, block
 
 
 def test_reach_hint_says_how_much_closer():
