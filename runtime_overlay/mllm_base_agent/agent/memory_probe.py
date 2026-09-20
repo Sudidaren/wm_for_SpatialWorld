@@ -53,9 +53,6 @@ class MemoryProbe:
         self._tick: int = 0
         self._hinter = None
         self._vlm = None                # 模型自己；用于开局自述任务物品
-        #: 连续被挡的步数。用来在"转身"的两个方向之间交替，避免连续两次
-        #: 建议互相抵消（先左后右回到原地）。
-        self._blocked_streak: int = 0
 
     def set_target_hint(self, cfg: Optional[Dict[str, Any]]) -> None:
         self._target_hint = dict(cfg or {})
@@ -94,6 +91,7 @@ class MemoryProbe:
             if action_name and object_type:
                 self._acts[str(object_type)] = (self._tick, str(action_name),
                                                 action_ok)
+            reach_gap = None
             if self._target_hint.get("enabled"):
                 from mllm_base_agent.agent import target_priority as tp
 
@@ -112,11 +110,28 @@ class MemoryProbe:
                         memory_frames=(None if _mf is None else int(_mf)),
                     )
                     self._hinter = hinter
-                # 被挡住的那一步不给"往哪走"的建议：脱困指令和"建议先转向它
-                # 再靠近"是两条打架的移动指令（实测 36% 的被挡提示同时挂了
-                # 它）。只压这一步；记忆行里的位置与距离照常保留。
-                block = hinter.update(wm_metadata, self._acts, held0, self._tick,
-                                      suppress_nav=bool(blocked))
+                # 先算这一步要不要发"距离提示"（它需要 hinter），再决定要不要
+                # 压掉导航建议 —— 顺序不能反，否则第一次调用时 hinter 还没建，
+                # 距离提示会被整条丢掉。
+                # nearest() 依赖"任务相关物体"集合，而那个集合是 relevant()
+                # 建立/缓存的（update() 内部也是调它）。这里先调一次幂等的，
+                # 让判断在新一步也能工作。
+                hinter.relevant([str(o.get("objectType"))
+                                 for o in (wm_metadata.get("objects") or [])
+                                 if o.get("objectType")])
+                reach_gap = self._reach_gap(
+                    wm_metadata, action_name, action_ok, blocked)
+                # 不给"往哪走"的两种情形 —— 都只压这一步，记忆行里的位置与
+                # 距离照常保留，压掉的是**指令**不是情报：
+                #   a) 被挡住：脱困指令与"建议先转向它再靠近"打架（实测 36%
+                #      的被挡提示同时挂了它）；
+                #   b) 马上要发"距离提示"（交互失败 + 目标可见但还太远）：
+                #      那是"去够眼前这个东西"，而 nav 建议只针对**看不见**的
+                #      目标 —— 两者一旦同时出现必然指向不同物体，就是两条移动
+                #      指令。例：Apple 在 1.6m 要走近，Fridge 在 2.2m 要转向。
+                block = hinter.update(
+                    wm_metadata, self._acts, held0, self._tick,
+                    suppress_nav=bool(blocked) or reach_gap is not None)
                 if block:
                     parts.append(block)
             inv = wm_metadata.get("inventoryObjects") or []
@@ -140,7 +155,6 @@ class MemoryProbe:
                 # 但反过来，被挡经常意味着"你已经站到那件家具面前了"（撞上冰箱
                 # 门，正确动作就是 OpenObject(Fridge)），所以不能只教绕路。
                 # 判据就写成"目标已到眼前、伸手可及"——这个条件 WM 自己知道。
-                self._blocked_streak += 1
                 parts.append(
                     "移动提示：⚠ 上一步被挡住了，画面完全没有发生变化——"
                     "继续朝那个方向走不会有任何效果，不要重复同一个动作。"
@@ -149,8 +163,6 @@ class MemoryProbe:
                     "如果目标已经就在眼前、伸手可及，那就直接对它做该做的交互"
                     "（拿起来 / 打开 / 放进去），不必先绕路"
                 )
-            else:
-                self._blocked_streak = 0
             # 同理：成功的那一步画面自己会说明，只有失败才值得占 token。
             if action_name and action_ok is False:
                 parts.append(f"上一个动作：{action_name}（失败：画面未变化）")
@@ -167,16 +179,11 @@ class MemoryProbe:
             # 教训：加提示 ≠ 有帮助，得量。这条通道的全部状态机（_recent /
             # _stuck_for）随它一起删除。
             # ④ 交互失败且目标还太远 -> 直接告诉它还差多少（可执行的数字）
-            if (action_name and action_ok is False
-                    and str(action_name) not in _MOVE_ACTIONS
-                    and not blocked
-                    and os.environ.get("LIGHTWM_REACH_HINT", "1") != "0"
-                    and self._hinter is not None):
-                gap = self._hinter.nearest(wm_metadata, visible=True)
-                if gap is not None and gap[1] > _REACH_M:
-                    parts.append(
-                        f"距离提示：{gap[0]} 在{gap[2]}约 {gap[1]:.1f}m，"
-                        f"要先走到 1m 以内才能交互（还差约 {gap[1] - _REACH_M:.1f}m）")
+            if reach_gap is not None:
+                parts.append(
+                    f"距离提示：{reach_gap[0]} 在{reach_gap[2]}约 {reach_gap[1]:.1f}m，"
+                    f"要先走到 1m 以内才能交互"
+                    f"（还差约 {reach_gap[1] - _REACH_M:.1f}m）")
         except Exception:
             import os as _os
             if _os.environ.get("WM_DEBUG"):
@@ -186,6 +193,25 @@ class MemoryProbe:
             return ""
         self._pending = ["；".join(parts)] if parts else []
         return self.pending_text()
+
+    def _reach_gap(self, wm_metadata, action_name, action_ok, blocked):
+        """这一步会不会发「距离提示」？会的话返回 (类型, 距离, 方向词)。
+
+        必须**在** hinter.update() 之前判断，因为一旦要发距离提示，就要同时
+        压掉这一步的导航建议：nav 建议只挑**看不见**的目标（记住的位置那几行），
+        而距离提示只挑**可见**的 —— 两者同时出现必然指向不同物体，就是两条
+        移动指令。例子：Apple 在眼前 1.6m 要走近，Fridge 在记忆里 2.2m 要转向。
+        """
+        if (not action_name or action_ok is not False
+                or str(action_name) in _MOVE_ACTIONS
+                or blocked
+                or os.environ.get("LIGHTWM_REACH_HINT", "1") == "0"
+                or self._hinter is None):
+            return None
+        gap = self._hinter.nearest(wm_metadata, visible=True)
+        if gap is not None and gap[1] > _REACH_M:
+            return gap
+        return None
 
     def pending_text(self) -> str:
         if not self._pending:

@@ -424,6 +424,39 @@ def test_reach_hint_says_how_much_closer():
     assert "距离提示" not in near, near
 
 
+def test_reach_hint_suppresses_the_navigation_nudge():
+    """要发"距离提示"的那一步，不许再挂一条"建议先转向它再靠近"。
+
+    导航建议只挑**看不见**的目标（记住的位置那几行），距离提示只挑**可见**的，
+    所以两条同时出现必然指向不同物体 —— 就是两条移动指令。实例：Apple 在
+    眼前 1.6m 要走近，Fridge 在记忆里 2.2m 要转向，模型不知道该听谁。
+    实测旧代码里这种组合出现过 47 次。压掉的只是**指令**，记忆行的位置
+    与距离照常保留。
+    """
+    p = _probe("put the apple in the fridge and close it")
+    # 第一步先建立相关物体集合（真实序列里第一步没有"上一个动作"）
+    p.update(wm_metadata=meta(objects=[("Apple", 0.0, 0.9, 1.9, True, 1.9, 0.2),
+                                       ("Fridge", 0.0, 0.9, 2.2, False, 2.2, 0.2)]),
+             action_name="MoveAhead", action_ok=True)
+    block = p.update(wm_metadata=meta(objects=[("Apple", 0.0, 0.9, 1.6, True, 1.6, 0.2),
+                                               ("Fridge", 0.0, 0.9, 2.2, False, 2.2, 0.2)]),
+                     action_name="PickupObject", object_type="Apple",
+                     action_ok=False)
+    assert "距离提示" in block, block
+    assert "建议先转向它再靠近" not in block, block
+    assert "记住的位置" in block, block          # 情报保留，只压指令
+
+
+def test_navigation_nudge_survives_when_there_is_no_reach_hint():
+    """不满足"距离提示"条件时，导航建议必须照旧给 —— 别把功能改没了。"""
+    p = _probe("put the apple in the fridge and close it")
+    block = p.update(wm_metadata=meta(objects=[("Apple", 0.0, 0.9, 0.8, True, 0.8, 0.2),
+                                               ("Fridge", 0.0, 0.9, 2.2, False, 2.2, 0.2)]),
+                     action_name="MoveAhead", action_ok=True)
+    assert "建议先转向它再靠近" in block, block
+    assert "距离提示" not in block, block
+
+
 def test_world_model_builds_anchors_and_dead_reckons():
     import numpy as np
 
