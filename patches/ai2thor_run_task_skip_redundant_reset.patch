@@ -1,0 +1,35 @@
+diff --git a/scripts/ai2thor/work/run_task.py b/scripts/ai2thor/work/run_task.py
+index 7fd2dde..6563564 100644
+--- a/scripts/ai2thor/work/run_task.py
++++ b/scripts/ai2thor/work/run_task.py
+@@ -223,8 +223,10 @@ def load_task_from_folder(task_folder_path: str) -> Dict[str, Any]:
+         with open(task_json_path, "r", encoding="utf-8") as f:
+             task_data = json.load(f)
+ 
+-        # Normalize success conditions: keep both the legacy single-dict form
+-        # and the list form so evaluators (create_evaluator_from_config) work.
++        # 官方 evaluator（evaluation.ai2thor create_evaluator_from_config）
++        # 读取的是 success_conditions（复数键）+ success_logic；仅有单数键
++        # 会导致其走 legacy 分支并对 list 调 .get() 抛异常，从而所有任务
++        # 恒判失败。这里把 task.json 的两种写法都归一化。
+         success_condition = task_data.get("success_condition")
+         success_conditions = task_data.get("success_conditions")
+         if success_condition is None:
+@@ -654,8 +656,15 @@ Example usage:
+ 
+             init_data, init_scene = load_init_actions_from_folder(task_folder_for_init)
+ 
+-            # If init specifies a scene, use it instead
+-            if init_scene:
++            # If init specifies a scene, use it instead.
++            #
++            # 2026-09-21：只有当 init 指定的场景**真的和当前场景不同**时才重来
++            # 一次。wrapper.reset() 是无条件 `controller.reset(scene=self.scene)`，
++            # 也就是一整次全场景重载；而 311 条任务里有 308 条的 init.json 写的
++            # 就是任务本身的场景（只有 ai2thor05571 是 FloorPlan412→FloorPlan430），
++            # 对那 308 条来说第二次 reset 是一次纯冗余的完整重载（云卡软件渲染下
++            # 实测要 ~180s），既不改状态，也白烧掉一半的场景初始化时间。
++            if init_scene and init_scene != getattr(env, "scene", None):
+                 task_scene = init_scene
+                 observation = env.reset(task_description, scene=task_scene)
+ 

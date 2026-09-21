@@ -19,12 +19,23 @@ from ai2thor.controller import Controller
 def main() -> None:
     scene = sys.argv[1] if len(sys.argv) > 1 else "FloorPlan315"
     timeout = float(sys.argv[2]) if len(sys.argv) > 2 else 900.0
+    platform = sys.argv[3] if len(sys.argv) > 3 else None
     t0 = time.time()
     try:
-        c = Controller(scene=scene, width=800, height=600, gridSize=0.25,
-                       visibilityDistance=1.0, server_timeout=timeout)
+        import os as _os
+        extra_modalities = _os.environ.get("PROBE_MODALITIES") == "1"
+        kwargs = dict(scene=scene, width=800, height=600, gridSize=0.25,
+                      visibilityDistance=1.0, server_timeout=timeout)
+        if extra_modalities:
+            # 复现评测里的渲染负载：WM 要 depth + instance segmentation，
+            # 每帧比单 RGB 多两条渲染管线。
+            kwargs.update(renderDepthImage=True,
+                          renderInstanceSegmentation=True)
+        if platform and platform.lower() != "none":
+            kwargs["platform"] = platform
+        c = Controller(**kwargs)
         dt = time.time() - t0
-        print(f"{scene} {dt:.1f}s OK", flush=True)
+        print(f"{scene} platform={platform or 'auto'} {dt:.1f}s OK", flush=True)
         # 再走一步，确认渲染也活着
         ev = c.step("RotateRight")
         print(f"{scene} step_ok={bool(ev.metadata.get('lastActionSuccess'))}",
