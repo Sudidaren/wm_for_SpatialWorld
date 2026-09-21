@@ -32,13 +32,16 @@ CARD_RUNS = {
     "8b": ("wm_q8b_438_v2", True),
     "kimi": ("wm_kimi_438_v2", True),
 }
-LOCAL_RUN = "/home/sudidaren/spatialworld_eval/runs/wm_gemini31pro_fix_rest156"
+#: 2026-09-21 18:29 起：本机在跑闭源主批次（Gemini+WM，71 条 = ai2thor 51 + procthor 20）
+LOCAL_RUN = "/home/sudidaren/spatialworld_eval/runs/closed_gemini_wm"
 
 #: 2026-09-21 01:33 起：网关 key 额度用尽（401 maximum fee exceeded，随后
 #: chat/completions 被临时封 429），本机的 Gemini+WM 与云上 gpt5 两条线按
 #: harness 第 4 条**主动暂停**，等 gateway_watchdog.py 探到恢复再自动续跑。
 #: 暂停期间不告警，只标记，免得淹掉真正的问题。
-PAUSED = {"gpt5", "local"}
+#: 2026-09-21 18:30 起：本机闭源批次在跑，不再暂停告警（只留 gpt5 卡，
+#: 它确实下线了，每轮报 UNREACHABLE 会淹掉真正的问题）。
+PAUSED = {"gpt5"}
 
 PROBE = r"""
 RUN="$1"; NEED_VLLM="$2"

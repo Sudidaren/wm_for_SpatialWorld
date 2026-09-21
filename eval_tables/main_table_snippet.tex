@@ -1,0 +1,48 @@
+% ---- required packages ----------------------------------------
+% \usepackage{booktabs}
+% \usepackage{multirow}
+% ---------------------------------------------------------------
+\begin{table*}[t]
+  \centering
+  \caption{Main results on the household subset of SpatialWorld (single-agent protocol). \emph{Invalid actions} counts steps whose environment call returned an error (target not in view, blocked by an obstacle, object does not exist), i.e.\ steps that changed nothing; the percentage in parentheses is its share of the average step count. Success rate excludes API/simulator failures ($=$ \emph{Null}) from the denominator. $\dagger$: batch still running, numbers will move.}
+  \label{tab:main-results}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{llrrrrrrr}
+    \toprule
+    Method & Environment & $N$ & Succ. & Fail. & Null & Success rate & Avg steps & Avg invalid actions \\
+    \midrule
+    \multirow{2}{*}{Qwen3-VL-30B-A3B} & AI2-THOR & 311 & 20 & 291 & 0 & 6.4\% & 18.0 & 13.0 (72\%) \\
+     & ProcTHOR & 127 & 0 & 127 & 0 & 0.0\% & 17.6 & 4.9 (28\%) \\
+    \cmidrule(l){1-9}
+    \multirow{2}{*}{Qwen3-VL-30B-A3B + WingmanWM} & AI2-THOR & 311 & 22 & 258 & 31 & 7.9\%$\dagger$ & 22.7 & ---- \\
+     & ProcTHOR & 127 & 0 & 126 & 1 & 0.0\%$\dagger$ & 15.0 & ---- \\
+    \cmidrule(l){1-9}
+    \multirow{2}{*}{Qwen3-VL-8B + WingmanWM} & AI2-THOR & 311 & 11 & 268 & 32 & 3.9\%$\dagger$ & 24.0 & ---- \\
+     & ProcTHOR & 127 & 0 & 121 & 6 & 0.0\%$\dagger$ & 29.1 & ---- \\
+    \cmidrule(l){1-9}
+    \multirow{2}{*}{Kimi-VL-A3B + WingmanWM} & AI2-THOR & 311 & 6 & 265 & 40 & 2.2\%$\dagger$ & 15.0 & ---- \\
+     & ProcTHOR & 127 & 0 & 124 & 3 & 0.0\%$\dagger$ & 18.3 & ---- \\
+    \cmidrule(l){1-9}
+    \multirow{2}{*}{Qwen3-VL-8B (BF16, vLLM)} & AI2-THOR & 311 & 6 & 261 & 44 & 2.2\%$\dagger$ & 25.1 & ---- \\
+     & ProcTHOR & 127 & 0 & 113 & 14 & 0.0\%$\dagger$ & 37.6 & ---- \\
+    \cmidrule(l){1-9}
+    \multirow{2}{*}{Kimi-VL-A3B (BF16, vLLM)} & AI2-THOR & 311 & 5 & 262 & 44 & 1.9\%$\dagger$ & 13.4 & ---- \\
+     & ProcTHOR & 127 & 0 & 125 & 2 & 0.0\%$\dagger$ & 18.8 & ---- \\
+    \cmidrule(l){1-9}
+    Qwen3-VL-30B-A3B + WingmanWM v1 & AI2-THOR & 311 & 17 & 291 & 3 & 5.5\%$\dagger$ & 21.2 & ---- \\
+    Qwen3-VL-8B + WingmanWM v1 & AI2-THOR & 311 & 14 & 258 & 39 & 5.1\%$\dagger$ & 24.1 & ---- \\
+    Kimi-VL-A3B + WingmanWM v1 & AI2-THOR & 311 & 6 & 256 & 49 & 2.3\%$\dagger$ & 13.3 & ---- \\
+    Gemini 3.1 Pro & AI2-THOR & 311 & 61 & 250 & 0 & 19.6\% & 22.6 & 3.0 (13\%) \\
+    Gemini 3.1 Pro & ProcTHOR & 127 & 1 & 126 & 0 & 0.8\% & 47.3 & 4.5 (10\%) \\
+    \multirow{2}{*}{Gemini 3.1 Pro + WingmanWM} & AI2-THOR & 120 & 43 & 76 & 1 & 36.1\%$\dagger$ & 23.0 & 4.0 (17\%) \\
+     & ProcTHOR & 20 & 2 & 18 & 0 & 10.0\% & 42.6 & 3.2 (8\%) \\
+    \cmidrule(l){1-9}
+    \multirow{2}{*}{GPT-5} & AI2-THOR & 120 & 22 & 98 & 0 & 18.3\% & 23.7 & ---- \\
+     & ProcTHOR & 20 & 0 & 0 & 20 & --$\dagger$ & -- & ---- \\
+    \cmidrule(l){1-9}
+    \multirow{2}{*}{GPT-5 + WingmanWM} & AI2-THOR & 120 & 36 & 83 & 1 & 30.3\%$\dagger$ & 22.8 & 6.5 (29\%) \\
+     & ProcTHOR & 20 & 0 & 7 & 0 & 0.0\%$\dagger$ & 7.1 & 0.1 (2\%) \\
+    \bottomrule
+  \end{tabular}
+\end{table*}

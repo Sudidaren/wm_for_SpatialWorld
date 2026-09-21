@@ -1,0 +1,121 @@
+﻿task_id,category,golden_len,search_prefix,baseline_success,wm_result_exists_current,wm_current_success,gpt5_baseline_exists,instruction
+ai2thor02436,Work,6,4,False,True,False,False,"I want to work for a while now, please open my laptop for me"
+ai2thor03002,Daily,13,4,False,True,False,False,"I'm hungry, so I want to put a slice of bread into the toast"
+ai2thor03003,Daily,12,2,False,True,False,False,I need to tidy up now. I need to put the apple on the right 
+ai2thor03012,Daily,11,3,False,False,False,False,I'm very hungry now. Please put the egg on my right into the
+ai2thor03017,Daily,5,1,True,False,False,False,I'm going to start cooking now. Please put the spatula in th
+ai2thor03019,Daily,7,0,False,True,True,False,I'm about to start cooking. Please slice the tomato and put 
+ai2thor03020,Daily,43,4,False,True,False,False,I'm getting ready to tidy up the kitchen. I'm thinking of pu
+ai2thor03026,Daily,8,1,False,True,False,False,I think this dish is a bit too bland. Please bring the salt 
+ai2thor03028,Daily,13,4,False,True,False,False,I'm hungry. Please take the egg out of the refrigerator and 
+ai2thor03031,Daily,8,2,False,False,False,False,This tomato is rotten. Please throw it in the trash can.
+ai2thor03034,Daily,8,0,True,False,False,False,I've cooked the potato. Please remove it from the microwave 
+ai2thor03035,Daily,6,0,False,True,False,False,I'm going to start cooking now. Please wash the pan and then
+ai2thor03036,Daily,11,2,False,True,True,False,"I want to slice the green in the refrigerator, then take one"
+ai2thor03037,Daily,7,4,False,True,True,False,"The microwave is empty, but it's still on. Turn it off, and "
+ai2thor03040,Daily,13,2,False,True,False,False,I'm going to the kitchen to get something to eat. Please tur
+ai2thor03042,Daily,7,2,True,False,False,False,I have washed the spoon and fork; please remove them from th
+ai2thor03051,Daily,16,6,False,True,False,False,"Please slice the tomato in the refrigerator, put one slice i"
+ai2thor03052,Daily,11,3,False,True,False,False,"I'm hungry. Please slice the potato, put a slice in the pan,"
+ai2thor03053,Daily,14,3,False,True,False,False,I'm about to cook. Please put the potato and egg in the pan 
+ai2thor03057,Daily,16,3,False,True,False,False,I don't want to eat the apple anymore. Please put it in the 
+ai2thor03058,Daily,13,3,False,True,False,False,"I'm about to start cooking, please put the spatula into the "
+ai2thor03061,Daily,14,2,False,True,False,False,I've washed this tomato. Please put it in the refrigerator a
+ai2thor03064,Daily,8,0,False,True,False,False,I forgot to turn off the coffee machine and the kitchen ligh
+ai2thor03065,Daily,6,1,True,False,False,False,I'd like some coffee. Please put a clean mug into the coffee
+ai2thor03068,Daily,16,2,False,True,False,False,"I don't want to eat lettuce, I want to eat potato. Please pu"
+ai2thor03069,Daily,4,1,True,False,False,False,I accidentally threw the lettuce in the trash can. Please ta
+ai2thor03070,Daily,8,0,False,True,False,False,I've just entered the kitchen. Please turn on the kitchen li
+ai2thor03071,Daily,10,0,False,True,False,False,"I want to eat toast. Please slice the bread, put one slice o"
+ai2thor03072,Daily,13,0,False,True,False,False,I accidentally burned the bread slice in the toaster. Please
+ai2thor03075,Daily,12,1,False,True,False,False,Please help me throw the apple into the trash can and turn o
+ai2thor04001,Daily,5,3,False,False,False,False,I'm about to wash my pillow. Please help me pick up the pill
+ai2thor04004,Work,16,3,False,True,False,False,Please move the book from the side table next to the window 
+ai2thor04005,Work,16,4,False,True,False,False,Please transfer the cellphone from the side table next to th
+ai2thor04006,Work,9,1,False,True,False,False,Please move the pencil from the desk on the right to the sid
+ai2thor04009,Entertain,13,3,False,True,False,False,I'd like to read a book. Please open the book on the table t
+ai2thor04036,Daily,17,6,False,True,False,False,I'm getting ready for bed. Please put the teddy bear and lap
+ai2thor04042,Travel,15,4,False,True,False,False,I'm getting ready to leave. Please hold my keychain and turn
+ai2thor04044,Daily,9,0,False,True,False,False,"I'm going home now, please turn on all the lights in the roo"
+ai2thor04046,Entertain,15,6,False,True,False,False,I want to work on my laptop while watching TV. Please enable
+ai2thor04053,Entertain,16,5,False,True,False,False,I want to watch TV. Please pick up the remote and turn on th
+ai2thor04054,Travel,18,1,False,True,False,False,I'm about to leave. Please take my phone and turn off all th
+ai2thor04055,Daily,12,7,False,True,False,False,This tissue box is broken; please throw it in the trash can.
+ai2thor04057,Entertain,11,4,False,True,False,False,I'd like to read a newspaper. Please bring one to the sofa.
+ai2thor04059,Daily,12,1,False,True,False,False,"I want to organize some things, please put the tissue box in"
+ai2thor04062,Entertain,21,4,False,True,True,True,I'd like to read a book on the sofa for a while. Please open
+ai2thor04064,Travel,6,2,False,True,False,False,I want to go out. Please take my keychain and turn off my la
+ai2thor04065,Daily,4,1,True,False,False,False,I want to drink water. Please pick up the bowl and fill it w
+ai2thor04066,Entertain,17,6,False,True,False,False,I'd like to check the news in the newspaper and on TV. Pleas
+ai2thor04067,Daily,3,0,True,False,False,False,I'd like to have the bowl and plate cleaned.
+ai2thor04068,Daily,18,4,False,True,False,False,Please put my keychain in the box.
+ai2thor04072,Daily,12,0,False,True,True,False,I want to sleep. Please turn off the TV and bring a pillow.
+ai2thor04102,Daily,5,2,False,False,False,False,I'm getting ready to leave. Please clean my bed and pick up 
+ai2thor04106,Daily,3,0,True,False,False,False,I'm going to tidy up the room. Please clean up all the dirt 
+ai2thor04117,Daily,9,1,False,True,True,False,I need to heat up the knife. Please put one knife in the pot
+ai2thor04118,Travel,11,2,False,True,False,False,I'm getting ready to leave. Please leave my keys on the sofa
+ai2thor04119,Daily,24,6,False,True,False,False,I'm going to clean the house now. Please put my keys and cre
+ai2thor04223,Daily,21,1,False,True,True,False,Both the pencil and pen are broken; please throw them in the
+ai2thor04225,Entertain,9,1,False,True,True,False,I'm tired and want to read a book in bed. Please open the bo
+ai2thor04226,Daily,13,5,False,True,False,False,"I have a runny nose, please send a box of tissues to the des"
+ai2thor04227,Entertain,10,1,False,True,False,False,I'd like to read a book in the armchair. Please open the boo
+ai2thor04228,Daily,4,1,True,False,False,False,"I want to sleep now. Please turn off my phone, then clean th"
+ai2thor04235,Daily,5,0,False,False,False,False,My pen is broken. Please throw the pen into the trash can.
+ai2thor04236,Daily,9,7,False,True,False,False,I want to clean the dirty mirror. Please clean the mirror.
+ai2thor04238,Travel,3,1,True,False,False,False,I want to put on my boots. Please pick up the boots located 
+ai2thor04240,Daily,8,6,False,False,False,False,Please water the houseplant as it is currently empty and lac
+ai2thor04241,Daily,4,2,True,False,False,False,I am trapped and need an emergency exit. Please break any wi
+ai2thor04242,Work,3,0,True,False,False,False,I want to start working. Please open the laptop and turn it 
+ai2thor04500,Work,7,5,False,False,False,False,I'm going to start working now. Please bring me the laptop f
+ai2thor04501,Daily,16,5,False,True,False,False,I'm thirsty. Please fill the mug at the coffee machine and p
+ai2thor04502,Entertain,12,10,False,True,True,False,Please pick up the tennis racket located in the aisle betwee
+ai2thor05002,Work,8,1,True,False,False,False,Please help me with this task in the scene: open the book an
+ai2thor05004,Daily,8,3,False,False,False,False,"I want this put away neatly, so please pick up the phone car"
+ai2thor05014,Work,13,11,False,True,True,False,Could you help me out by picking up the pencil carefully and
+ai2thor05022,Work,8,5,False,True,False,False,"I need to tidy up, so please tidy up the bed by clearing any"
+ai2thor05024,Daily,9,2,False,True,False,False,"I'm tidying up, so please pick up the book and place it on t"
+ai2thor05025,Daily,9,3,False,True,False,False,"I'm taking care of a couple things, so please fill the mug w"
+ai2thor05026,Work,9,3,False,True,False,False,"I'm doing some chores, so please put the laptop on the desk,"
+ai2thor05027,Daily,9,3,False,True,False,False,"I'm putting things where they belong, so please pick up the "
+ai2thor05028,Work,7,3,True,False,False,False,Please help me with this task in the scene: toggle the lapto
+ai2thor05029,Daily,7,1,True,False,False,False,"I'm putting things where they belong, so please pick up the "
+ai2thor05041,Work,5,2,False,False,False,False,"To start the research, please power on the cell phone and op"
+ai2thor05045,Daily,6,4,False,True,False,False,"It looks like it needs liquid, so please fill the bowl with "
+ai2thor05049,Entertain,2,0,True,False,False,False,It's time for my daily exercise; can you pick up the dumbbel
+ai2thor05056,Daily,5,3,True,False,False,False,"I want things put away, so please close the box on the table"
+ai2thor05058,Daily,12,2,False,True,False,False,"I'm putting things where they belong, so please pick up the "
+ai2thor05060,Entertain,10,2,False,True,False,False,We are under a cyberattack. Power on the TV for news and bre
+ai2thor05065,Daily,3,1,False,False,False,False,"I'm about to start cooking, could you please pick up a potat"
+ai2thor05069,Daily,9,1,False,True,False,False,"I'm putting things where they belong, so please pick up the "
+ai2thor05077,Daily,7,5,False,False,False,False,Please help me with this task in the scene: break the plate.
+ai2thor05501,Entertain,4,2,False,True,False,False,"I want to exercise now, could you please hand me the tennis "
+ai2thor05508,Daily,5,2,False,False,False,False,It's such a lovely day; I feel like tidying up my bed. First
+ai2thor05512,Entertain,9,3,False,False,False,False,I'd like to read the book on my desk before bed. Please tidy
+ai2thor05515,Entertain,6,1,True,False,False,False,I feel like taking a break; I'm going to pick up my phone fr
+ai2thor05518,Entertain,3,0,True,False,False,False,I want to take a proper break. Please pour me a glass of wat
+ai2thor05519,Work,2,0,True,False,False,False,I’d like to start working from the bedside—could you please 
+ai2thor05521,Work,6,0,False,False,False,False,I want to study now. Please pick up the fountain pen on the 
+ai2thor05523,Daily,2,0,True,False,False,False,The sunlight is lovely now—there's no need for extra light. 
+ai2thor05524,Work,6,0,False,False,False,True,I'm ready to work now; the desk lamp is already on. Please t
+ai2thor05528,Work,7,0,False,True,True,False,I'd like to work and watch TV at the same time. Could you pl
+ai2thor05533,Daily,8,0,False,True,False,False,The sunlight is so bright today—there's no need for the big 
+ai2thor05534,Travel,9,0,False,False,False,False,I'm going to walk out for a bit—I don't want to leave the do
+ai2thor05536,Daily,8,0,False,False,False,True,I'm about to have dinner—please take the bowl from the coffe
+ai2thor05537,Entertain,11,0,False,False,False,False,I've finished dinner and feel like reading the paper—please 
+ai2thor05541,Entertain,12,0,False,False,False,False,I’ve finished dinner and feel like scrolling on my phone for
+ai2thor05545,Daily,6,0,False,False,False,False,"I want to wash my face—please pick up the soap bottle, turn "
+ai2thor05546,Daily,4,0,False,False,False,False,"I'm going to take a shower—open the shower door, step inside"
+ai2thor05547,Daily,6,0,False,False,False,False,I've finished my shower. Please open the bathroom door for m
+ai2thor05549,Daily,2,0,True,False,False,False,I want to wash my face—could you turn on the faucet for me?
+ai2thor05554,Daily,2,0,True,False,False,False,I've finished using the toilet and washing my hands—please t
+ai2thor05555,Daily,5,0,False,True,True,False,I'm about to start my bath—please pick up the candle next to
+ai2thor05558,Travel,2,0,False,True,True,False,I need to go to the bank—could you find my credit card and h
+ai2thor05562,Daily,5,0,False,True,False,False,I'm tidying up—please put the watch and credit card from the
+ai2thor05563,Entertain,5,0,False,False,False,False,I'm looking for the remote. Could you look for the remote on
+ai2thor05564,Daily,8,0,False,True,False,False,I'm getting sleepy—could you turn off all the lights in the 
+ai2thor05565,Entertain,16,0,False,False,False,False,Could you grab my phone from the dining table and bring it t
+ai2thor05566,Daily,13,0,False,False,False,False,"I'd like some wine with dinner—please find my watering can, "
+ai2thor05570,Daily,15,0,False,False,False,False,I'm going to step into the shower—please open the door for m
+ai2thor05571,Daily,9,0,False,True,False,False,I left the cloth on the counter. Could you take it to the si
+ai2thor05573,Daily,4,0,False,False,False,False,I don't need this rag anymore. Please throw it in the trash.
+ai2thor05577,Daily,5,0,True,False,False,True,I accidentally threw the paper into the trash can next to th

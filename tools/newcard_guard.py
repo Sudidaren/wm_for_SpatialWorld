@@ -34,7 +34,11 @@ LOG = "/root/autodl-tmp/guard.log"
 STALE_SECONDS = 1800            # 30 分钟
 #: 这些不算"卡死的内联脚本"，不许杀
 KEEP = ("work.run_task", "v1 wm wm_", "vllm", "guard.py", "jupyter",
-        "tensorboard", "multiprocessing.resource_tracker")
+        "tensorboard", "multiprocessing.resource_tracker",
+        #: 2026-09-21 晚：闭源主批次的 supervisor 也是内联 python，
+        #: 它的 args 里没有 "v1 wm wm_" 这个老标记，30 分钟后会被当"卡死
+        #: 的内联脚本"杀掉。加上 run 名前缀白名单。
+        "main_gpt5")
 
 
 def sh(cmd: str) -> str:
@@ -75,7 +79,11 @@ def kill(pid: int) -> None:
 
 def cycle() -> None:
     rows = ps_snapshot()
-    workers = [r for r in rows if "work.run_task" in r[3]]
+    # 2026-09-21：把 TVR addon 的 runner 也算作 worker —— 它同样会拉起
+    # ai2thor/ProcTHOR 的 Unity 进程，不算进来的话看护会报 "worker=0 thor=N"，
+    # 排障时看着像一堆孤儿，其实是正常的评测进程。
+    workers = [r for r in rows
+               if "work.run_task" in r[3] or "run_tvr_agent" in r[3]]
     sups = [r for r in rows if "v1 wm wm_" in r[3]]
     thor = [r for r in rows if "thor-Linux64" in r[3]]
     killed = []
@@ -86,7 +94,13 @@ def cycle() -> None:
     # results.csv，和新的 supervisor 抢文件。旧判据只看 thor 的 ppid==1，
     # 漏掉了这种"孤儿 worker + 它名下的 thor"（thor 的 ppid 是那个孤儿
     # worker 的 pid，既不等于 1 也不是活着的 worker，于是两边都躲开了）。
-    orphan_workers = [r for r in workers if r[1] == 1]
+    # 注意：TVR addon 的 shard 是 run_tvr.sh 用 `setsid nohup` 起的，启动脚本
+    # 一退出它们的 ppid 就变成 1 —— 这是**设计如此**，不是孤儿。2026-09-21
+    # 14:25 就因为把 run_tvr_agent 也认成 worker，一口气把 4 个正在跑的 wm
+    # shard 连它们名下的 Unity 一起杀了。所以：只让它们参与计数（下面 thor 的
+    # 判据要用），**绝不把它们当孤儿 worker 杀**。
+    orphan_workers = [r for r in workers
+                      if r[1] == 1 and "run_tvr_agent" not in r[3]]
     ow_pids = {r[0] for r in orphan_workers}
     for pid, _, etimes, _ in orphan_workers:
         kill(pid)

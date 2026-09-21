@@ -18,8 +18,14 @@ echo "[2/3] spatialworld_eval 评测 harness"
 tar cf "$OUT/spatialworld_eval.tar" --exclude='__pycache__' --exclude='runs' \
   --exclude='*.pyc' --exclude='__pycache__' \
   spatialworld_eval
-echo "[3/3] SpatialWorld 任务数据 + overlay 文件"
+echo "[3/3] SpatialWorld 任务数据 + 代码"
+# 2026-09-20 教训：只打 data/mllm_base_agent/evaluation/experiments/tests 会漏掉
+# scripts/ —— 评测入口就是 `python -m scripts.ai2thor.work.run_task`，卡上会报
+# ModuleNotFoundError: No module named 'scripts'。actions/assets/configs/core
+# 同理（动作解析、资源、配置、核心模块）。这几个加起来才 3.4MB，别省。
 tar cf "$OUT/spatialworld.tar" --exclude='__pycache__' --exclude='*.pyc' \
   SpatialWorld/data SpatialWorld/mllm_base_agent SpatialWorld/evaluation \
-  SpatialWorld/experiments SpatialWorld/tests
+  SpatialWorld/experiments SpatialWorld/tests \
+  SpatialWorld/scripts SpatialWorld/actions SpatialWorld/configs \
+  SpatialWorld/core SpatialWorld/assets
 ls -la "$OUT" | awk '{print $5/1e6" MB", $NF}'
