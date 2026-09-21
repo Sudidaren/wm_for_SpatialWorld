@@ -27,7 +27,7 @@
 | Gemini 3.1 Pro + WingmanWM  | AI2-THOR | 120 | **36.1%** | **23.0** | **4.0** | **472k** | 119/120 |
 | Gemini 3.1 Pro + WingmanWM  | ProcTHOR | 20 | **10.0%** | **42.6** | **3.2** | **1222k** | 20/20 |
 | GPT-5 $\star$ | AI2-THOR | 120 | **18.3%** | **23.7** | **-** | **344k** | 120/120 · ep0 |
-| GPT-5 $\star$ | ProcTHOR | 20 | **-** | **-** | **-** | **-** | 0/20 |
+| GPT-5 $\star$ | ProcTHOR | 20 | **0.0%** | **53.5** | **4.6** | **1080k** | 20/20 |
 | GPT-5 + WingmanWM $\ddagger$ | AI2-THOR | 120 | **30.3%** | **22.8** | **6.5** | **333k** | 119/120 ⚠️partial · ep51 |
 | GPT-5 + WingmanWM $\ddagger$ | ProcTHOR | 20 | **-** | **-** | **-** | **-** | 7/20 ⚠️partial |
 

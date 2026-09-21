@@ -96,13 +96,15 @@ BATCHES = [
      ["main_gpt5_base_s0", "main_gpt5_base_s1", "main_gpt5_base_s2"],
      "ai2thor", 120, True, r"$\star$", "ai2thor"),
     ("GPT-5", "ProcTHOR",
-     ["main_gpt5_base_s0", "main_gpt5_base_s1", "main_gpt5_base_s2"],
+     ["main_gpt5_base_s0", "main_gpt5_base_s1", "main_gpt5_base_s2",
+      "closed_gpt5_base_procthor"],
      "procthor", 20, True, r"$\star$", "procthor"),
     ("GPT-5 + WingmanWM", "AI2-THOR",
      ["main_gpt5_wm_s0", "main_gpt5_wm_s1", "main_gpt5_wm_s2", "closed_gpt5_wm"],
      "ai2thor", 120, False, r"$\ddagger$", "ai2thor"),
     ("GPT-5 + WingmanWM", "ProcTHOR",
-     ["main_gpt5_wm_procthor"], "procthor", 20, False, r"$\ddagger$", "procthor"),
+     ["main_gpt5_wm_procthor", "closed_gpt5_wm_procthor"],
+     "procthor", 20, False, r"$\ddagger$", "procthor"),
 ]
 
 
