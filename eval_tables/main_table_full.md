@@ -29,7 +29,7 @@
 | GPT-5 $\star$ | AI2-THOR | 311 | **18.3%** | **23.7** | **-** | **344k** | 120/311 · ep0 |
 | GPT-5 $\star$ | ProcTHOR | 127 | **0.0%** | **53.5** | **4.6** | **1080k** | 20/127 |
 | GPT-5 + WingmanWM $\ddagger$ | AI2-THOR | 311 | **30.3%** | **22.8** | **6.5** | **333k** | 119/311 ⚠️partial · ep51 |
-| GPT-5 + WingmanWM $\ddagger$ | ProcTHOR | 127 | **-** | **-** | **-** | **-** | 7/127 ⚠️partial |
+| GPT-5 + WingmanWM $\ddagger$ | ProcTHOR | 127 | **0.0%** | **40.5** | **2.5** | **1058k** | 20/127 ⚠️partial |
 
 > 脚注：`⚠️partial` = 批次没跑完或该环境还没跑；`· epN` = 该行只有 N 条能拿到 `episode_*.json`（旧卡下线，卡上两条 GPT-5 臂的 episode 取不回来），**无效动作**列只在有 episode 的样本上算。
 
