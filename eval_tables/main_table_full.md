@@ -2,7 +2,7 @@
 
 > **无效动作** = 该步环境返回非空 `error_message`（如 `X is not in view`、`Y is blocking Agent 0`、`does not exist in scene`）——花了步数但什么也没改变。
 > 取自 `episode_*.json → trajectory[i].error_message`，不是 `run_stream.log` 里的 `Action failed`（那里含重试，会重复计数）。
-> **成功率（TSR）** = success / (success+failure)；`failed_external`（API/模拟器故障）不进分母，只体现在 Coverage 列里，避免把半批次当最终结果。
+> **成功率（TSR）** = success / (success+failure)。不进分母的有三类：`Status=failed_external`（API/模拟器故障）、`Status=pending`（批次没跑完）、以及 `Failure Type ∈ {api_error, env_error, external_error, external}` —— 最后一类是历史口径（少数 `failed_model` 的失败原因其实是环境异常，例如模型传了非法参数导致模拟器报错），一律按未判定处理。三者都只体现在 Coverage 列里。
 > **Avg tokens/task** = 该行进入分母的那些任务的平均总 token（`token_total`）——即跑一条任务平均要花多少 token 的直接口径。
 
 | Method | Env | N | **TSR** | **Avg steps** | **Avg invalid actions** | **Avg tokens/task** | Coverage |
@@ -26,10 +26,10 @@
 | Gemini 3.1 Pro (frozen v1) $\dagger$ | ProcTHOR | 127 | **0.8%** | **47.3** | **4.5** | **1441k** | 127/127 ⚠️partial |
 | Gemini 3.1 Pro + WingmanWM  | AI2-THOR | 311 | **27.1%** | **24.4** | **4.6** | **509k** | 218/311 |
 | Gemini 3.1 Pro + WingmanWM  | ProcTHOR | 127 | **10.0%** | **42.6** | **3.2** | **1222k** | 20/127 |
-| GPT-5 $\star$ | AI2-THOR | 311 | **18.3%** | **23.7** | **-** | **344k** | 120/311 · ep0 |
+| GPT-5 $\star$ | AI2-THOR | 311 | **19.5%** | **23.7** | **-** | **344k** | 113/311 · ep0 |
 | GPT-5 $\star$ | ProcTHOR | 127 | **0.0%** | **53.5** | **4.6** | **1080k** | 20/127 |
-| GPT-5 + WingmanWM $\ddagger$ | AI2-THOR | 311 | **30.3%** | **22.8** | **6.5** | **333k** | 119/311 ⚠️partial · ep51 |
-| GPT-5 + WingmanWM $\ddagger$ | ProcTHOR | 127 | **0.0%** | **40.5** | **2.5** | **1058k** | 20/127 ⚠️partial |
+| GPT-5 + WingmanWM $\ddagger$ | AI2-THOR | 311 | **30.5%** | **22.8** | **6.5** | **333k** | 118/311 · ep51 |
+| GPT-5 + WingmanWM $\ddagger$ | ProcTHOR | 127 | **0.0%** | **40.5** | **2.5** | **1058k** | 20/127 |
 
 > 脚注：`⚠️partial` = 批次没跑完或该环境还没跑；`· epN` = 该行只有 N 条能拿到 `episode_*.json`（旧卡下线，卡上两条 GPT-5 臂的 episode 取不回来），**无效动作**列只在有 episode 的样本上算。
 

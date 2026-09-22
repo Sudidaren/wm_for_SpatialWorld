@@ -101,10 +101,10 @@ BATCHES = [
      "procthor", 20, True, r"$\star$", "procthor"),
     ("GPT-5 + WingmanWM", "AI2-THOR",
      ["main_gpt5_wm_s0", "main_gpt5_wm_s1", "main_gpt5_wm_s2", "closed_gpt5_wm"],
-     "ai2thor", 120, False, r"$\ddagger$", "ai2thor"),
+     "ai2thor", 120, True, r"$\ddagger$", "ai2thor"),
     ("GPT-5 + WingmanWM", "ProcTHOR",
      ["main_gpt5_wm_procthor", "closed_gpt5_wm_procthor"],
-     "procthor", 20, False, r"$\ddagger$", "procthor"),
+     "procthor", 20, True, r"$\ddagger$", "procthor"),
 ]
 
 
@@ -169,12 +169,18 @@ def stats(runs, env: str, planned: int, allowed: Optional[set] = None) -> Dict:
     succ, null, fail = [], [], []
     for r in rows:
         st, ft = _g(r, "Status"), _g(r, "Failure Type")
-        if st == "failed_external" or ft in EXTERNAL:
+        #: 只有 success / failed_model 才是"判定过"。`pending`（卡中途下线，
+        #: 任务没跑完）和空 Status 都算没判定 —— 2026-09-22 核查时发现旧逻辑
+        #: 把 7 条 pending 当成了失败，把 GPT-5 基线从 19.5% 压到 18.3%。
+        if st in ("failed_external", "pending", "", "running", "queued") or ft in EXTERNAL:
             null.append(r)
-        elif _g(r, "Success").lower() == "true":
+            continue
+        if _g(r, "Success").lower() == "true":
             succ.append(r)
-        else:
+        elif _g(r, "Success").lower() == "false" or st == "failed_model":
             fail.append(r)
+        else:
+            null.append(r)
     decided = succ + fail
     steps: List[int] = []
     invalid: List[int] = []
@@ -238,8 +244,12 @@ def main() -> int:
              "`Y is blocking Agent 0`、`does not exist in scene`）——花了步数但什么也没改变。")
     L.append("> 取自 `episode_*.json → trajectory[i].error_message`，"
              "不是 `run_stream.log` 里的 `Action failed`（那里含重试，会重复计数）。")
-    L.append("> **成功率（TSR）** = success / (success+failure)；`failed_external`（API/"
-             "模拟器故障）不进分母，只体现在 Coverage 列里，避免把半批次当最终结果。")
+    L.append("> **成功率（TSR）** = success / (success+failure)。不进分母的有三类："
+             "`Status=failed_external`（API/模拟器故障）、`Status=pending`（批次没跑完）、"
+             "以及 `Failure Type ∈ {api_error, env_error, external_error, external}` —— "
+             "最后一类是历史口径（少数 `failed_model` 的失败原因其实是环境异常，"
+             "例如模型传了非法参数导致模拟器报错），一律按未判定处理。"
+             "三者都只体现在 Coverage 列里。")
     L.append("> **Avg tokens/task** = 该行进入分母的那些任务的平均总 token"
              "（`token_total`）——即跑一条任务平均要花多少 token 的直接口径。")
     L.append("")
