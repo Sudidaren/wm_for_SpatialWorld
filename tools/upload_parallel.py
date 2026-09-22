@@ -16,10 +16,10 @@ import time
 
 import paramiko
 
-HOST = "connect.westb.seetacloud.com"
-PORT = 56266
-PW = "/dgVLk3vXhc1"
-REMOTE_DIR = "/root/autodl-tmp"
+HOST = os.environ.get("UPLOAD_HOST", "connect.westb.seetacloud.com")
+PORT = int(os.environ.get("UPLOAD_PORT", "56266"))
+PW = os.environ.get("UPLOAD_PW", "/dgVLk3vXhc1")
+REMOTE_DIR = os.environ.get("UPLOAD_DIR", "/root/autodl-tmp")
 
 
 def put_one(remote: str, local: str, errors: list) -> None:
