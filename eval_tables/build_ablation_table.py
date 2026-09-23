@@ -103,7 +103,9 @@ def main() -> int:
     out_md = ["# 5 臂消融（官方清单：AI2-THOR + ProcTHOR，**不跑 TVR**）", "",
               "> 每臂成绩按同一份官方消融清单计算，口径与主表一致："
               "`failed_external` / `pending` / `env_error` 不计入分母，"
-              "只体现在 Coverage 列。生成时间：2026-09-23。", ""]
+              "只体现在 Coverage 列。生成时间：2026-09-23。", "",
+              "> 实验设计（5 臂各自隔离什么、任务集怎么来、判据、复现命令）见 "
+              "[`../docs/ABLATION_DESIGN.md`](../docs/ABLATION_DESIGN.md)。", ""]
     out_rows = []
     for model, tag in MODELS.items():
         out_md += [f"## {model}", "",

@@ -5,6 +5,9 @@
 > 这份文档是**接手必读**：当前运行时结构、全部开关（含"目标物位置提示默认关闭"）、
 > 三张卡的评测状态与配对结果、未实现清单、踩过的坑、复现步骤。
 > 本轮结果快照见 [`results/wm_ai2thor311_20260916/`](results/wm_ai2thor311_20260916/README.md)。
+> 消融实验（5 臂归因：注入文本 / 目标物位置提示 / 记忆 vs 感知）设计见
+> [`docs/ABLATION_DESIGN.md`](docs/ABLATION_DESIGN.md)，结果表见
+> [`eval_tables/ablation_table.md`](eval_tables/ablation_table.md)。
 > 运行时改动（相对官方 SpatialWorld）见 [`runtime_overlay/`](runtime_overlay/README.md)（47 个文件，sha256 校验）。
 
 LightWM 是一个"人类式情境顾问"世界模型：**仅凭 RGB 图像与动作日志**记忆、理解并
@@ -161,6 +164,20 @@ GitHub 只保留该部署版本及其复现所需的代码、checkpoint、训练
 和最终报告。未通过 SpatialWorld test 安全门槛的候选仅保存在本地实验目录，
 不进入仓库发布版本。详细说明见
 [`phase_c/hidden_world_belief/README.md`](phase_c/hidden_world_belief/README.md)。
+
+## 消融实验（5 臂，2026-09-22 方案 B）
+
+为回答"WingmanWM 的增益到底从哪来"，三个模型各跑 5 个臂：`base`（无 WM）、
+`wm`（两道注入通道全开）、`noinject`（WM 照跑但一行不注入）、`notarget`
+（关目标物位置提示）、`nomem`（关跨帧记忆，只报当前帧）。任务集 = 官方 39 条
+（27 AI2-THOR + 12 ProcTHOR）∪ 诊断层（任一臂成功过的任务），
+8B 49 条 / 30B 53 条 / Kimi 46 条；**属 informative subset，只用于归因**，
+主结论仍用 120+20 主表。
+
+* 设计与判据：[`docs/ABLATION_DESIGN.md`](docs/ABLATION_DESIGN.md)
+* 结果表：[`eval_tables/ablation_table.md`](eval_tables/ablation_table.md)
+  （重算：`python3 eval_tables/build_ablation_table.py`）
+* 卡上 runner：[`tools/card_run_ablation_planb.sh`](tools/card_run_ablation_planb.sh)
 
 ## 当前状态（截至 2026-09-07）
 
