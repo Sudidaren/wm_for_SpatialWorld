@@ -1,0 +1,25 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[letterpaper,margin=0.75in]{geometry}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{amssymb}
+\newsavebox{\mainbox}
+\begin{document}
+
+\typeout{===TEXTWIDTH=\the\textwidth}
+
+\begin{table*}[t]
+\centering
+\caption{Main results on the household subset of SpatialWorld (single-agent protocol), $N$ = 311 AI2-THOR / 127 ProcTHOR tasks. TSR is the task success rate over decided tasks. \emph{Prem.\ DONE} is the share of tasks where the model declared Done while the simulator's success conditions were unmet; \emph{step limit} is the share that ran out of the step budget. \emph{Invalid} is the share of executed steps whose environment call returned an error, i.e.\ steps that changed nothing. Costs are averaged per task over the same decided set. WM = WingmanWM. All cells are placeholders for now.}
+\label{tab:main-results-v2}
+\sbox{\mainbox}{\input{main_table_v2.tex}}
+\typeout{===MAINBOX-WIDTH=\the\wd\mainbox}
+\ifdim\wd\mainbox>\textwidth
+  \typeout{===VERDICT=TOO-WIDE}
+\else
+  \typeout{===VERDICT=FITS}
+\fi
+\usebox{\mainbox}
+\end{table*}
+
+\end{document}

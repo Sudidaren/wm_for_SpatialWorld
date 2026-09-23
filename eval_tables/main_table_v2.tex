@@ -1,0 +1,96 @@
+% =====================================================================
+% Main results table, v2  (2026-09-16)
+%
+% Layout
+%   1. One row per (backbone, environment); the two sub-columns under every
+%      metric are "base" (backbone alone) and "WM" (backbone + WingmanWM).
+%   2. Backbones are split into an open-source block and a closed-source
+%      block.  Each block label is centred across the full table and has a
+%      rule both above and below it.
+%   3. Metric names are short tags (TSR, Step, Inv, Prem, SLim, Tok) spanning
+%      their two sub-columns; definitions live in the caption.
+%   4. The Inv cell stacks its two numbers (count on top, share of steps
+%      below) to keep the 12 numeric columns inside the text width.
+%
+% Abbreviations
+%   base = backbone on its own      WM   = with WingmanWM
+%   TSR  = task success rate (%)    Step = average steps per task
+%   Inv  = average invalid actions (count; share of steps underneath)
+%   Prem = % of tasks where the model declared Done while the simulator's
+%          success conditions were unmet
+%   SLim = % of tasks that ran out of the step budget
+%   Tok  = total (prompt + completion) tokens per task, in thousands
+%
+% Required packages:
+%   \usepackage{booktabs}   % \toprule \midrule \cmidrule \bottomrule \addlinespace
+%   \usepackage{multirow}   % \multirow
+%   (\shortstack is plain LaTeX, no package needed)
+%
+% Width (measured, letterpaper / 0.75in margins / twocolumn, text width
+% 505.9pt; wrap in \begin{table*}[t] or 14 columns will not fit one column):
+%   all cells "--"                     \small + 4pt  453pt   fits
+%   filled, worst case (4-digit tok)   \small + 4pt  485pt   fits
+% 5pt overflows (511pt), so 4pt is the maximum.  Because Inv stacks its two
+% numbers the rows are two lines high throughout, which also keeps the table
+% uniform once the long numbers are filled in.
+%
+% Filling a row pair from results.csv (see fill_main_table.py):
+%   \multirow{2}{*}{Qwen3-VL-8B} & AI2-THOR & <base 6 cells> & <WM 6 cells> \\
+%   & ProcTHOR & <base 6 cells> & <WM 6 cells> \\
+%   where the 6 cells are TSR, Step, Inv, Prem, SLim, Tok in that order.
+%
+% Suggested caption (paste into your float):
+%   Main results on the household subset of SpatialWorld (single-agent
+%   protocol).  $N$ = 311 AI2-THOR / 127 ProcTHOR decided tasks.  Under each
+%   metric the two sub-columns give the backbone alone (\emph{base}) and the
+%   backbone with WingmanWM added (\emph{WM}).  TSR: task success rate.
+%   Step: average steps per task.  Inv: average invalid actions, i.e.\ steps
+%   whose environment call returned an error (target not in view, blocked by
+%   an obstacle, object does not exist), with their share of the average step
+%   count beneath.  Prem: share of tasks where the model declared Done while
+%   the simulator's success conditions were unmet.  SLim: share of tasks that
+%   exhausted the step budget.  Tok: total (prompt $+$ completion) tokens per
+%   task, in thousands.  All backbones are instruction-tuned.  "--" = batch
+%   not yet scored.
+%
+% Usage: paste this whole block (it is a group + tabular, no float) inside
+% \begin{center}...\end{center}, or inside \begin{table*}...\end{table*}.
+% =====================================================================
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}ll *{6}{r r}@{}}
+  \toprule
+  & & \multicolumn{2}{c}{TSR} & \multicolumn{2}{c}{Step} & \multicolumn{2}{c}{Inv}
+    & \multicolumn{2}{c}{Prem} & \multicolumn{2}{c}{SLim} & \multicolumn{2}{c}{Tok} \\
+  \cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}
+  \cmidrule(lr){9-10}\cmidrule(lr){11-12}\cmidrule(lr){13-14}
+  Model & Env
+    & base & WM & base & WM & base & WM & base & WM & base & WM & base & WM \\
+  \midrule
+  \multicolumn{14}{@{}c}{\itshape Open-source} \\
+  \midrule
+  \multirow{2}{*}{Qwen3-VL-8B}
+    & AI2-THOR & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+    & ProcTHOR & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+  \addlinespace[2pt]
+  \multirow{2}{*}{Kimi-VL-A3B}
+    & AI2-THOR & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+    & ProcTHOR & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+  \addlinespace[2pt]
+  \multirow{2}{*}{Qwen3-VL-30B-A3B}
+    & AI2-THOR & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+    & ProcTHOR & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+  \midrule
+  \multicolumn{14}{@{}c}{\itshape Closed-source (API)} \\
+  \midrule
+  \multirow{2}{*}{Gemini 3.1 Pro}
+    & AI2-THOR & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+    & ProcTHOR & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+  \addlinespace[2pt]
+  \multirow{2}{*}{GPT-5}
+    & AI2-THOR & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+    & ProcTHOR & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+  \bottomrule
+\end{tabular}
+\endgroup

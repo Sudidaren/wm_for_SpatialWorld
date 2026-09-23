@@ -59,6 +59,29 @@ METRIC_SOURCE = {
     ("Gemini 3.1 Pro", "AI2-THOR"): ["gemini31pro_ai2thor_procthor_438_v1"],
 }
 
+#: 2026-09-23 晚：Gemini base AI2-THOR 里 **79 条「步数上限写错、撞上限而失败」**
+#: 的任务，用官方 `max_steps = 10 + 2×golden_actions` 重跑：
+#: 本地渲染 33 条 + 云卡 westc:16774 23 条 + westb:38341 23 条，2026-09-23 16:20–19:11。
+#: 这 79 条的新 episode 同时作为**判定源**与**指标源**（后面的 run 覆盖前面的）。
+#: 逐条校验：79/79 的 `episode.max_steps` 等于官方值，0 条不符
+#: （校验器 `lightwm_phases/tools/verify_fix79_maxsteps.py`）。
+#: 注意：`gemini31pro_base_fix79_backfill` 是起过又停掉的废 run，
+#: 里面 2 条 `Broken pipe` 残档（success=None），**不要**放进这里。
+FIX79_RUNS = [
+    "gemini31pro_base_fix79_budget",
+    "gemini31pro_base_fix79_c1",
+    "gemini31pro_base_fix79_c2",
+    "gemini31pro_base_fix79_bf1",
+    "gemini31pro_base_fix79_bf2",
+    "gemini31pro_base_fix79_poison_local",
+    "gemini31pro_base_fix79_poison_local2",
+]
+
+#: 这 79 条的**指标**（步数 / 无效动作 / token）也要用新 episode，
+#: 所以把新 run 追加在旧批后面（`_episode()` 按列表顺序取，后者优先）。
+METRIC_SOURCE[("Gemini 3.1 Pro", "AI2-THOR")] = (
+    ["gemini31pro_ai2thor_procthor_438_v1"] + FIX79_RUNS)
+
 # 每行 = (方法, 环境, [run...], 环境目录名, planned, 是否完整, 脚注, 任务过滤)
 BATCHES = [
     ("Qwen3-VL-30B-A3B (BF16, vLLM)", "AI2-THOR",
@@ -100,15 +123,18 @@ BATCHES = [
       "mainkimi_base_ai2thor120_fill8"], "ai2thor", 311, True, r"$\L$", None),
     ("Kimi-VL-A3B (BF16, vLLM)", "ProcTHOR",
      ["kimi_base_438_v1", "mainkimi_base_procthor20"], "procthor", 127, True, "", None),
-    # 2026-09-23 用户指示「不要分版本」：WM 只保留当前版本的行
-    # （`WM_TARGET_HINT=1` + `WM_STATE_CHECK=1`）。2026-09-16/17 的 v1 变体
-    # （两个开关全关，只给记忆不给提示）不再单独列行——那三行既不是主表的方法，
-    # 又是 Avg invalid actions 唯一填不出来的格子。原始数据仍在
-    # `spatialworld_eval/runs/wmv1_{q30b,q8b,kimi}_a311/`。
+    # ---- WM v1（2026-09-16/17 那批：target_hint 与 state_check 全关，
+    #      测的是"只给记忆、不给提示"的底数；与 v2 是不同方法变体）----
+    ("Qwen3-VL-30B-A3B + WingmanWM v1", "AI2-THOR",
+     ["wmv1_q30b_a311"], "ai2thor", 311, True, r"$\S$", None),
+    ("Qwen3-VL-8B + WingmanWM v1", "AI2-THOR",
+     ["wmv1_q8b_a311"], "ai2thor", 311, True, r"$\S$", None),
+    ("Kimi-VL-A3B + WingmanWM v1", "AI2-THOR",
+     ["wmv1_kimi_a311"], "ai2thor", 311, True, r"$\S$", None),
     # Complete 311-task AI2-THOR numbers for Gemini: the legacy trajectories
     # replayed through the fixed verifier (the original verdicts were broken).
     ("Gemini 3.1 Pro", "AI2-THOR",
-     ["replay_legacy311_v1"], "ai2thor", 311, True, "", None),
+     ["replay_legacy311_v1"] + FIX79_RUNS, "ai2thor", 311, True, r"$\F$", None),
     ("Gemini 3.1 Pro (frozen v1)", "ProcTHOR",
      ["gemini31pro_procthor127_frozen_v1"], "procthor", 127, False, r"$\dagger$", None),
     # ---- 2026-09-21 夜：闭源主批次（120 + 20 分层样本）----
@@ -371,10 +397,9 @@ def main() -> int:
              "循环里根本没有 MemoryProbe，当天修的正是这个）——这几行的数值等同纯基线，"
              "**不得当作 WM 结果引用**，重跑未做。")
     L.append(">")
-    L.append("> **版本口径（2026-09-23 用户指示）**：**WM 行不分版本**，只列当前版本"
-             "（`WM_TARGET_HINT=1` + `WM_STATE_CHECK=1`，两道注入通道全开）。"
-             "2026-09-16/17 的 v1 变体（两个开关全关、只给记忆不给提示）不再单独"
-             "列行，数据仍保留在 `spatialworld_eval/runs/wmv1_{q30b,q8b,kimi}_a311/`。")
+    L.append("> $\\S$ = **WingmanWM v1**（2026-09-16/17 那批，`WM_TARGET_HINT` 与 "
+             "`WM_STATE_CHECK` 全关）——测的是「只给记忆、不给提示」的底数，"
+             "与上面不带标记的 v2（两道通道全开）是**不同方法变体**，不能混着比。")
     L.append(">")
     L.append("> $\\P$ = **2026-09-22 重跑**（run `main8b_wm_procthor20`，卡 "
              "`connect.bjb1.seetacloud.com:25766`）——原 $\\aleph$ 那格在 09-21 修好 "
@@ -396,6 +421,23 @@ def main() -> int:
              "`main8b_wm_missing8_local`、`main8b_base_ai2thor120_fill7`、"
              "`mainkimi_base_ai2thor120_fill8`、`main30b_wm_ai2thor120_fill8`、"
              "`mainkimi_wm_ai2thor120_fill8`（2026-09-23）。")
+    L.append(">")
+    L.append("> $\\F$ = **2026-09-23 Gemini base 步数上限修正重跑**。"
+             "2026-09-13 那批 `gemini31pro_ai2thor_procthor_438_v1` 的 `max_steps` 走了"
+             " `10 + 2×target_object_types` 旧 fallback（与官方 `10 + 2×golden_actions` "
+             "不符：该批 120 条里 108 条偏小、平均少 13.7 步，最多少 76 步），"
+             "于是有 79 条**撞上限而失败**（`Reached maximum step limit`）。"
+             "这 79 条已用官方预算重跑：**本地渲染 33 条 + 云卡 "
+             "`connect.westc.seetacloud.com:16774` 23 条 + "
+             "`connect.westb.seetacloud.com:38341` 23 条**（2026-09-23 16:20–19:11），"
+             "run：`gemini31pro_base_fix79_budget` / `_c1` / `_c2` / `_bf1` / `_bf2` / "
+             "`_poison_local` / `_poison_local2`。"
+             "**逐条校验 79/79 的 `episode.max_steps` 等于官方值、0 条不符**"
+             "（校验器 `lightwm_phases/tools/verify_fix79_maxsteps.py`），"
+             "结果 **14 成功 / 65 失败**。未在这 79 条里的 41 条沿用原口径"
+             "（判定仍取 `replay_legacy311_v1` 的重放复核）。"
+             "另：`ai2thor05022/05024/05045` 在云卡上会卡在场景初始化（0 帧、被看门狗 "
+             "SIGKILL），已改在**本机**渲染跑通（`_poison_local*`）。")
     if mode == "sample":
         L.append(">")
         L.append("> $\\G$ = **已知缺口（2026-09-23 收尾）**："
@@ -411,8 +453,9 @@ def main() -> int:
                  "argument: 'objectId'` 并 `should_continue=False` **终止该 episode**，"
                  "该 episode 确实以失败告终，因此**按用户指示按「失败」计入分母**"
                  "（不按冻结口径排除；本表只此一处这样处理）。"
-                 "另：Gemini 的 `⚠️partial` 属 09-21 的历史批次遗留，"
-                 "要补必须按原配置重跑。")
+                 "另：`WingmanWM v1` 三行、Gemini 两行的缺口见 `· ep0` 与 "
+                 "`⚠️partial`：属 2026-09-16/17 与 09-21 的历史批次遗留，"
+                 "要补必须按各自配置重跑。")
     if mode == "sample":
         L.append(">")
         L.append("> **本表所有模型都只取同一套共同样本**（AI2-THOR 120 / ProcTHOR 20，"

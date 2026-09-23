@@ -19,7 +19,10 @@
 | Qwen3-VL-8B (BF16, vLLM)  | ProcTHOR | 20 | **0.0%** | **23.9** | **5.3** | **313k** | 20/20 |
 | Kimi-VL-A3B (BF16, vLLM) $\L$ | AI2-THOR | 120 | **2.5%** | **13.4** | **8.7** | **174k** | 120/120 |
 | Kimi-VL-A3B (BF16, vLLM)  | ProcTHOR | 20 | **0.0%** | **25.6** | **5.8** | **428k** | 20/20 |
-| Gemini 3.1 Pro  | AI2-THOR | 120 | **20.0%** | **12.6** | **3.1** | **147k** | 120/120 |
+| Qwen3-VL-30B-A3B + WingmanWM v1 $\S$ | AI2-THOR | 120 | **5.1%** | **21.5** | **-** | **258k** | 118/120 · ep0 |
+| Qwen3-VL-8B + WingmanWM v1 $\S$ | AI2-THOR | 120 | **3.7%** | **24.9** | **-** | **302k** | 109/120 · ep0 |
+| Kimi-VL-A3B + WingmanWM v1 $\S$ | AI2-THOR | 120 | **1.9%** | **13.3** | **-** | **163k** | 104/120 · ep0 |
+| Gemini 3.1 Pro $\F$ | AI2-THOR | 120 | **31.7%** | **19.5** | **4.7** | **379k** | 120/120 |
 | Gemini 3.1 Pro (frozen v1) $\dagger$ | ProcTHOR | 20 | **5.0%** | **40.5** | **3.1** | **945k** | 20/20 ⚠️partial |
 | Gemini 3.1 Pro + WingmanWM  | AI2-THOR | 120 | **35.8%** | **23.1** | **4.0** | **474k** | 120/120 |
 | Gemini 3.1 Pro + WingmanWM  | ProcTHOR | 20 | **10.0%** | **42.6** | **3.2** | **1222k** | 20/20 |
@@ -34,12 +37,14 @@
 
 > $\aleph$ = **该批 ProcTHOR 没有接入 WM**（2026-09-21 之前 procthor 的 agent 循环里根本没有 MemoryProbe，当天修的正是这个）——这几行的数值等同纯基线，**不得当作 WM 结果引用**，重跑未做。
 >
-> **版本口径（2026-09-23 用户指示）**：**WM 行不分版本**，只列当前版本（`WM_TARGET_HINT=1` + `WM_STATE_CHECK=1`，两道注入通道全开）。2026-09-16/17 的 v1 变体（两个开关全关、只给记忆不给提示）不再单独列行，数据仍保留在 `spatialworld_eval/runs/wmv1_{q30b,q8b,kimi}_a311/`。
+> $\S$ = **WingmanWM v1**（2026-09-16/17 那批，`WM_TARGET_HINT` 与 `WM_STATE_CHECK` 全关）——测的是「只给记忆、不给提示」的底数，与上面不带标记的 v2（两道通道全开）是**不同方法变体**，不能混着比。
 >
 > $\P$ = **2026-09-22 重跑**（run `main8b_wm_procthor20`，卡 `connect.bjb1.seetacloud.com:25766`）——原 $\aleph$ 那格在 09-21 修好 ProcTHOR 的 WM 接入之前跑，等于纯基线；本次 WM 感知栈（RF-DETR + DA2 深度）改在 GPU 上跑，同一套 20 条样本、同一 BF16 权重、同一注入参数（`WM_TARGET_HINT=1`、`WM_STATE_CHECK=1`）。结果 20/20 判定、`episode_*.json` 20/20，所以 **Avg invalid actions 首次可填（2.40）**；步数 22.2→38.1、token 277k→592k 即 WM 真正在注入提示的证据。来源：`spatialworld_eval/runs/main8b_wm_procthor20`（2026-09-22 20:40 完成，rc=0）。
 >
 > $\L$ = **2026-09-23 本地渲染 + 云端 vLLM 补跑**（§8.4/§9.4）。有 7 条 AI2-THOR 任务（`ai2thor05022/05024/05028/05029/05515/05519/05521`）在云端每条臂上都会卡死在第一个 `step`（`pending`、attempts=3），另有 `ai2thor03075` 记为 env_error；这几条改在**本机渲染**（AI2-THOR Linux64 + `DISPLAY=:0`）、**模型仍走云端 vLLM**（`BASE_URL=http://127.0.0.1:1800x/v1`，隧道直连对应卡）跑，任务集、BF16 权重、注入参数（`WM_TARGET_HINT=1`、`WM_STATE_CHECK=1`、`LIGHTWM_DEPTH_SOURCE=da2`）与主表一致。run：`main8b_wm_missing8_local`、`main8b_base_ai2thor120_fill7`、`mainkimi_base_ai2thor120_fill8`、`main30b_wm_ai2thor120_fill8`、`mainkimi_wm_ai2thor120_fill8`（2026-09-23）。
 >
-> $\G$ = **已知缺口（2026-09-23 收尾）**：`Qwen3-VL-30B-A3B + WingmanWM` AI2-THOR = 119/120：`ai2thor03075`（指令为 *throw the apple into the trash can*，gold 路径是 `PutObject(GarbageCan)`）在该臂上让模型选择了动作 `ThrowObject(Apple)`；**官方 wrapper** 会把它拼成 `{action: "ThrowObject", objectId: <id>, moveMagnitude: 150}`，而 AI2-THOR 的 `ThrowObject` 只接受 `moveMagnitude`/`forceAction`（不接受 `objectId`），于是 `controller.step` 抛 `ValueError`，**官方 runner**（上游 init 提交）的 `except Exception` 再把它写成 `Environment exception: Action "ThrowObject" called with invalid argument: 'objectId'` 并 `should_continue=False` **终止该 episode**，该 episode 确实以失败告终，因此**按用户指示按「失败」计入分母**（不按冻结口径排除；本表只此一处这样处理）。另：Gemini 的 `⚠️partial` 属 09-21 的历史批次遗留，要补必须按原配置重跑。
+> $\F$ = **2026-09-23 Gemini base 步数上限修正重跑**。2026-09-13 那批 `gemini31pro_ai2thor_procthor_438_v1` 的 `max_steps` 走了 `10 + 2×target_object_types` 旧 fallback（与官方 `10 + 2×golden_actions` 不符：该批 120 条里 108 条偏小、平均少 13.7 步，最多少 76 步），于是有 79 条**撞上限而失败**（`Reached maximum step limit`）。这 79 条已用官方预算重跑：**本地渲染 33 条 + 云卡 `connect.westc.seetacloud.com:16774` 23 条 + `connect.westb.seetacloud.com:38341` 23 条**（2026-09-23 16:20–19:11），run：`gemini31pro_base_fix79_budget` / `_c1` / `_c2` / `_bf1` / `_bf2` / `_poison_local` / `_poison_local2`。**逐条校验 79/79 的 `episode.max_steps` 等于官方值、0 条不符**（校验器 `lightwm_phases/tools/verify_fix79_maxsteps.py`），结果 **14 成功 / 65 失败**。未在这 79 条里的 41 条沿用原口径（判定仍取 `replay_legacy311_v1` 的重放复核）。另：`ai2thor05022/05024/05045` 在云卡上会卡在场景初始化（0 帧、被看门狗 SIGKILL），已改在**本机**渲染跑通（`_poison_local*`）。
+>
+> $\G$ = **已知缺口（2026-09-23 收尾）**：`Qwen3-VL-30B-A3B + WingmanWM` AI2-THOR = 119/120：`ai2thor03075`（指令为 *throw the apple into the trash can*，gold 路径是 `PutObject(GarbageCan)`）在该臂上让模型选择了动作 `ThrowObject(Apple)`；**官方 wrapper** 会把它拼成 `{action: "ThrowObject", objectId: <id>, moveMagnitude: 150}`，而 AI2-THOR 的 `ThrowObject` 只接受 `moveMagnitude`/`forceAction`（不接受 `objectId`），于是 `controller.step` 抛 `ValueError`，**官方 runner**（上游 init 提交）的 `except Exception` 再把它写成 `Environment exception: Action "ThrowObject" called with invalid argument: 'objectId'` 并 `should_continue=False` **终止该 episode**，该 episode 确实以失败告终，因此**按用户指示按「失败」计入分母**（不按冻结口径排除；本表只此一处这样处理）。另：`WingmanWM v1` 三行、Gemini 两行的缺口见 `· ep0` 与 `⚠️partial`：属 2026-09-16/17 与 09-21 的历史批次遗留，要补必须按各自配置重跑。
 >
 > **本表所有模型都只取同一套共同样本**（AI2-THOR 120 / ProcTHOR 20，分层抽样、与 311/127 同分布），这样跨模型可以直接比。各模型自己跑过的完整批次见 `main_table_full.md`。
