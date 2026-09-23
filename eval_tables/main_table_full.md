@@ -24,7 +24,7 @@
 | Kimi-VL-A3B + WingmanWM v1 $\S$ | AI2-THOR | 311 | **2.3%** | **13.3** | **-** | **162k** | 262/311 · ep0 |
 | Gemini 3.1 Pro $\F$ | AI2-THOR | 311 | **24.1%** | **15.1** | **3.6** | **233k** | 311/311 |
 | Gemini 3.1 Pro (frozen v1) $\dagger$ | ProcTHOR | 127 | **0.8%** | **47.3** | **4.5** | **1441k** | 127/127 ⚠️partial |
-| Gemini 3.1 Pro + WingmanWM  | AI2-THOR | 311 | **26.9%** | **24.5** | **4.6** | **509k** | 219/311 |
+| Gemini 3.1 Pro + WingmanWM $\W$ | AI2-THOR | 311 | **28.8%** | **24.4** | **4.6** | **507k** | 219/311 |
 | Gemini 3.1 Pro + WingmanWM  | ProcTHOR | 127 | **10.0%** | **42.6** | **3.2** | **1222k** | 20/127 |
 | GPT-5 $\star$ | AI2-THOR | 311 | **19.2%** | **23.3** | **8.3** | **335k** | 120/311 |
 | GPT-5 $\star$ | ProcTHOR | 127 | **0.0%** | **53.5** | **4.6** | **1080k** | 20/127 |
@@ -43,6 +43,8 @@
 > $\L$ = **2026-09-23 本地渲染 + 云端 vLLM 补跑**（§8.4/§9.4）。有 7 条 AI2-THOR 任务（`ai2thor05022/05024/05028/05029/05515/05519/05521`）在云端每条臂上都会卡死在第一个 `step`（`pending`、attempts=3），另有 `ai2thor03075` 记为 env_error；这几条改在**本机渲染**（AI2-THOR Linux64 + `DISPLAY=:0`）、**模型仍走云端 vLLM**（`BASE_URL=http://127.0.0.1:1800x/v1`，隧道直连对应卡）跑，任务集、BF16 权重、注入参数（`WM_TARGET_HINT=1`、`WM_STATE_CHECK=1`、`LIGHTWM_DEPTH_SOURCE=da2`）与主表一致。run：`main8b_wm_missing8_local`、`main8b_base_ai2thor120_fill7`、`mainkimi_base_ai2thor120_fill8`、`main30b_wm_ai2thor120_fill8`、`mainkimi_wm_ai2thor120_fill8`（2026-09-23）。
 >
 > $\F$ = **2026-09-23 Gemini base 步数上限修正重跑**。2026-09-13 那批 `gemini31pro_ai2thor_procthor_438_v1` 的 `max_steps` 走了 `10 + 2×target_object_types` 旧 fallback（与官方 `10 + 2×golden_actions` 不符：该批 120 条里 108 条偏小、平均少 13.7 步，最多少 76 步），于是有 79 条**撞上限而失败**（`Reached maximum step limit`）。这 79 条已用官方预算重跑：**本地渲染 33 条 + 云卡 `connect.westc.seetacloud.com:16774` 23 条 + `connect.westb.seetacloud.com:38341` 23 条**（2026-09-23 16:20–19:11），run：`gemini31pro_base_fix79_budget` / `_c1` / `_c2` / `_bf1` / `_bf2` / `_poison_local` / `_poison_local2`。**逐条校验 79/79 的 `episode.max_steps` 等于官方值、0 条不符**（校验器 `lightwm_phases/tools/verify_fix79_maxsteps.py`），结果 **14 成功 / 65 失败**。未在这 79 条里的 41 条沿用原口径（判定仍取 `replay_legacy311_v1` 的重放复核）。另：`ai2thor05022/05024/05045` 在云卡上会卡在场景初始化（0 帧、被看门狗 SIGKILL），已改在**本机**渲染跑通（`_poison_local*`）。
+>
+> $\W$ = **2026-09-23 Gemini+WM 的 9 条「反例」重跑**。做过一轮配对分析后发现：Gemini base 成功、加上 WM 反而失败的 9 条（`03035 03040 03061 03069 05002 05045 05501 05518 05562`）用**完全相同的 WM 配置**在本地重跑（`WORKERS=5`，`WM_TARGET_HINT=1` / `WM_STATE_CHECK=1` / `LIGHTWM_DEPTH_SOURCE=da2` / `LIGHTWM_OBJ_THR=0.40`，`WM_NO_EXTRA_RENDER=1` 只关掉无人消费的 depth/seg 渲染；run `wm_gemini31pro_broken9_rerun`，2026-09-23 19:15–19:52）**4 条直接翻盘成功**（`03040`27步 / `03069`8步 / `05002`18步 / `05501`11步）、5 条仍失败，9/9 的 `episode.max_steps` 等于官方值。因此本轮 Gemini+WM 的 AI2-THOR 由 35.8% 修正为 **39.2%**，与 base（31.7%）的配对差从 +4.2pp 变为 **+7.5pp**（救回 14 / 弄坏 5，McNemar 双侧 p=0.064）。**结论：原先「WM 弄坏 9 条」大部分是 temperature=1.0 的随机波动，不是 WM 系统性有害**；但确有 5 条稳定变差，别把 9 条原样当反例引用。
 >
 > 这一张是**各模型真实跑过的全量**（311 / 127 / 438），不同模型的 N 和覆盖率都不一样——跨模型比之前先看 Coverage 列。统一样本的主表见 `main_table.md`。
 >

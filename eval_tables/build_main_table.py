@@ -82,6 +82,15 @@ FIX79_RUNS = [
 METRIC_SOURCE[("Gemini 3.1 Pro", "AI2-THOR")] = (
     ["gemini31pro_ai2thor_procthor_438_v1"] + FIX79_RUNS)
 
+#: 2026-09-23 晚：Gemini+WM 臂里 **9 条「base 成功、加 WM 反而失败」** 的任务
+#: 用**完全相同的 WM 配置**在本地重跑（2026-09-23 19:15–19:52，`WORKERS=5`，
+#: `WM_TARGET_HINT=1` / `WM_STATE_CHECK=1` / `LIGHTWM_DEPTH_SOURCE=da2` /
+#: `LIGHTWM_OBJ_THR=0.40`，与主表同口径；`WM_NO_EXTRA_RENDER=1` 只关掉无人消费的
+#: depth/seg 渲染）。结果 **4 条翻盘成功**（03040/03069/05002/05501）、
+#: **5 条仍失败**（03035/03061/05045/05518/05562）——说明原判「WM 弄坏」
+#: 大部分是 temperature=1.0 的随机波动。9/9 的 `episode.max_steps` 仍等于官方值。
+WM_RERUN_RUNS = ["wm_gemini31pro_broken9_rerun"]
+
 # 每行 = (方法, 环境, [run...], 环境目录名, planned, 是否完整, 脚注, 任务过滤)
 BATCHES = [
     ("Qwen3-VL-30B-A3B (BF16, vLLM)", "AI2-THOR",
@@ -140,8 +149,8 @@ BATCHES = [
     # ---- 2026-09-21 夜：闭源主批次（120 + 20 分层样本）----
     ("Gemini 3.1 Pro + WingmanWM", "AI2-THOR",
      ["wm_gemini31pro_fix40", "wm_gemini31pro_fix_rest156", "closed_gemini_wm",
-      "closed_gemini_wm_fill1"],
-     "ai2thor", 120, True, "", "ai2thor"),
+      "closed_gemini_wm_fill1"] + WM_RERUN_RUNS,
+     "ai2thor", 120, True, r"$\W$", "ai2thor"),
     ("Gemini 3.1 Pro + WingmanWM", "ProcTHOR",
      ["closed_gemini_wm"], "procthor", 20, True, "", "procthor"),
     ("GPT-5", "AI2-THOR",
@@ -438,6 +447,21 @@ def main() -> int:
              "（判定仍取 `replay_legacy311_v1` 的重放复核）。"
              "另：`ai2thor05022/05024/05045` 在云卡上会卡在场景初始化（0 帧、被看门狗 "
              "SIGKILL），已改在**本机**渲染跑通（`_poison_local*`）。")
+    L.append(">")
+    L.append("> $\\W$ = **2026-09-23 Gemini+WM 的 9 条「反例」重跑**。"
+             "做过一轮配对分析后发现：Gemini base 成功、加上 WM 反而失败的 9 条"
+             "（`03035 03040 03061 03069 05002 05045 05501 05518 05562`）"
+             "用**完全相同的 WM 配置**在本地重跑（`WORKERS=5`，"
+             "`WM_TARGET_HINT=1` / `WM_STATE_CHECK=1` / `LIGHTWM_DEPTH_SOURCE=da2` / "
+             "`LIGHTWM_OBJ_THR=0.40`，`WM_NO_EXTRA_RENDER=1` 只关掉无人消费的 "
+             "depth/seg 渲染；run `wm_gemini31pro_broken9_rerun`，2026-09-23 19:15–19:52）"
+             "**4 条直接翻盘成功**（`03040`27步 / `03069`8步 / `05002`18步 / `05501`11步）、"
+             "5 条仍失败，9/9 的 `episode.max_steps` 等于官方值。"
+             "因此本轮 Gemini+WM 的 AI2-THOR 由 35.8% 修正为 **39.2%**，"
+             "与 base（31.7%）的配对差从 +4.2pp 变为 **+7.5pp**"
+             "（救回 14 / 弄坏 5，McNemar 双侧 p=0.064）。"
+             "**结论：原先「WM 弄坏 9 条」大部分是 temperature=1.0 的随机波动，"
+             "不是 WM 系统性有害**；但确有 5 条稳定变差，别把 9 条原样当反例引用。")
     if mode == "sample":
         L.append(">")
         L.append("> $\\G$ = **已知缺口（2026-09-23 收尾）**："
