@@ -49,6 +49,16 @@ SAMPLE = {
     "procthor": "/home/sudidaren/lightwm_phases/plans/procthor_main20.txt",
 }
 
+#: 有些行的**判定**必须来自 A（例如 Gemini 的 replay 复核：原批判定器有 bug，
+#: 0% 成功显然不对），但 A 只是"重放动作、不调模型"，所以 **episode 级指标
+#: （步数 / 无效动作 / token）要回到原批 B** —— 两边是同一条轨迹（逐动作比对一致：
+#: 例如 `ai2thor03002` 原批 16 个动作、replay 17 个，前 6 个完全相同）。
+#: 另外 replay 的 results.csv 步数列被放大了（≈ episode 步数 ×2，03002 = 34 vs 17），
+#: 不能当真实 episode 长度用。判定仍以 A 为准。
+METRIC_SOURCE = {
+    ("Gemini 3.1 Pro", "AI2-THOR"): ["gemini31pro_ai2thor_procthor_438_v1"],
+}
+
 # 每行 = (方法, 环境, [run...], 环境目录名, planned, 是否完整, 脚注, 任务过滤)
 BATCHES = [
     ("Qwen3-VL-30B-A3B (BF16, vLLM)", "AI2-THOR",
@@ -190,8 +200,20 @@ def _episode(runs, env: str, task_id: str) -> Optional[Dict]:
 
 
 def stats(runs, env: str, planned: int, allowed: Optional[set] = None,
-          force_fail: Optional[set] = None) -> Dict:
+          force_fail: Optional[set] = None,
+          metric_runs: Optional[List[str]] = None) -> Dict:
     rows = _rows(runs)
+    #: episode 级指标（步数 / 无效动作 / token）的来源，不改判定
+    metric_rows: Dict[str, Dict] = {}
+    for trun in (metric_runs or []):
+        tp = os.path.join(RUNS, trun, "results.csv")
+        if not os.path.isfile(tp):
+            continue
+        with open(tp, encoding="utf-8-sig") as fh:
+            for r in csv.DictReader(fh):
+                tid = _g(r, "Task ID") or _g(r, "task_id")
+                if tid:
+                    metric_rows.setdefault(tid, r)
     #: 有些 run 的 results.csv 同时含 ai2thor 与 procthor（例如云上那三批
     #: `wmv_*_438_v2`），必须按 Environment 列过滤，否则两个环境会互相污染。
     rows = [r for r in rows if _g(r, "Environment").lower() == env]
@@ -227,15 +249,20 @@ def stats(runs, env: str, planned: int, allowed: Optional[set] = None,
         tid = _g(r, "Task ID") or _g(r, "task_id")
         #: 平均任务花费 token（口径见 2026-09-16 那份快照）：优先整数字段
         #: token_total，没有就 prompt+completion；只统计进分母（decided）的任务。
+        src = r
         tk = _g(r, "token_total") or _g(r, "Token Total") or _g(r, "Total Tokens")
+        if not tk.isdigit() and tid in metric_rows:
+            src = metric_rows[tid]
+            tk = (_g(src, "token_total") or _g(src, "Token Total")
+                  or _g(src, "Total Tokens"))
         if tk.isdigit():
             tokens.append(int(tk))
         else:
-            p = _g(r, "Prompt Tokens") or _g(r, "prompt_tokens")
-            c = _g(r, "Completion Tokens") or _g(r, "completion_tokens")
+            p = _g(src, "Prompt Tokens") or _g(src, "prompt_tokens")
+            c = _g(src, "Completion Tokens") or _g(src, "completion_tokens")
             if p.isdigit() or c.isdigit():
                 tokens.append(int(p or 0) + int(c or 0))
-        ep = _episode(runs, env, tid)
+        ep = _episode((metric_runs or runs), env, tid)
         if not ep:
             missing += 1
             s = _g(r, "Actual Steps")
@@ -305,7 +332,8 @@ def main() -> int:
             #: 全量表：N 用该环境的全集规模，Coverage 才表示"实际跑到多少"。
             planned = 311 if envdir == "ai2thor" else 127
         s = stats(runs, envdir, planned, _allowed(filt),
-                  FORCE_FAILURE.get((method, env)))
+                  FORCE_FAILURE.get((method, env)),
+                  METRIC_SOURCE.get((method, env)))
         data.append((method, env, s))
         cov = f"{s['decided']}/{planned}"
         if not complete:

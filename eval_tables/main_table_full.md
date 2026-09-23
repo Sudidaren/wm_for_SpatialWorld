@@ -22,7 +22,7 @@
 | Qwen3-VL-30B-A3B + WingmanWM v1 $\S$ | AI2-THOR | 311 | **5.5%** | **21.2** | **-** | **253k** | 308/311 · ep0 |
 | Qwen3-VL-8B + WingmanWM v1 $\S$ | AI2-THOR | 311 | **5.1%** | **24.1** | **-** | **292k** | 272/311 · ep0 |
 | Kimi-VL-A3B + WingmanWM v1 $\S$ | AI2-THOR | 311 | **2.3%** | **13.3** | **-** | **162k** | 262/311 · ep0 |
-| Gemini 3.1 Pro  | AI2-THOR | 311 | **19.6%** | **22.6** | **3.0** | **-** | 311/311 |
+| Gemini 3.1 Pro  | AI2-THOR | 311 | **19.6%** | **12.4** | **3.0** | **143k** | 311/311 |
 | Gemini 3.1 Pro (frozen v1) $\dagger$ | ProcTHOR | 127 | **0.8%** | **47.3** | **4.5** | **1441k** | 127/127 ⚠️partial |
 | Gemini 3.1 Pro + WingmanWM  | AI2-THOR | 311 | **27.1%** | **24.4** | **4.6** | **509k** | 218/311 |
 | Gemini 3.1 Pro + WingmanWM  | ProcTHOR | 127 | **10.0%** | **42.6** | **3.2** | **1222k** | 20/127 |
