@@ -30,6 +30,13 @@ from typing import Dict, List, Optional
 RUNS = "/home/sudidaren/spatialworld_eval/runs"
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXTERNAL = {"api_error", "env_error", "external_error", "external"}
+
+#: 2026-09-23 用户指示：官方 wrapper/runner 路径会让模型合法的 `ThrowObject(...)`
+#: 变成致命 env_error 并终止 episode（`ai2thor03075`）。用户决定**这一格按失败
+#: 计入分母**，而不是按默认口径排除。只对下面这些 (方法, 环境) 行、这些任务生效。
+FORCE_FAILURE = {
+    ("Qwen3-VL-30B-A3B + WingmanWM", "AI2-THOR"): {"ai2thor03075"},
+}
 #: 旧的三张卡下线了，卡上那两条 GPT-5 臂的 episode 没法再取；这些 run 名
 #: 对应的是从卡上拉回来的 results.csv（没有 episode 目录），无效动作列会缺。
 STALE_CARD_RUNS = {"main_gpt5_base_s0", "main_gpt5_base_s1", "main_gpt5_base_s2",
@@ -181,7 +188,8 @@ def _episode(runs, env: str, task_id: str) -> Optional[Dict]:
     return None
 
 
-def stats(runs, env: str, planned: int, allowed: Optional[set] = None) -> Dict:
+def stats(runs, env: str, planned: int, allowed: Optional[set] = None,
+          force_fail: Optional[set] = None) -> Dict:
     rows = _rows(runs)
     #: 有些 run 的 results.csv 同时含 ai2thor 与 procthor（例如云上那三批
     #: `wmv_*_438_v2`），必须按 Environment 列过滤，否则两个环境会互相污染。
@@ -192,6 +200,11 @@ def stats(runs, env: str, planned: int, allowed: Optional[set] = None) -> Dict:
     succ, null, fail = [], [], []
     for r in rows:
         st, ft = _g(r, "Status"), _g(r, "Failure Type")
+        tid = _g(r, "Task ID") or _g(r, "task_id")
+        #: 用户指定的例外：这些任务即使被记成 env_error，也按"失败"计入分母。
+        if force_fail and tid in force_fail and st == "failed_model":
+            fail.append(r)
+            continue
         #: 只有 success / failed_model 才是"判定过"。`pending`（卡中途下线，
         #: 任务没跑完）和空 Status 都算没判定 —— 2026-09-22 核查时发现旧逻辑
         #: 把 7 条 pending 当成了失败，把 GPT-5 基线从 19.5% 压到 18.3%。
@@ -290,7 +303,8 @@ def main() -> int:
             filt = None
             #: 全量表：N 用该环境的全集规模，Coverage 才表示"实际跑到多少"。
             planned = 311 if envdir == "ai2thor" else 127
-        s = stats(runs, envdir, planned, _allowed(filt))
+        s = stats(runs, envdir, planned, _allowed(filt),
+                  FORCE_FAILURE.get((method, env)))
         data.append((method, env, s))
         cov = f"{s['decided']}/{planned}"
         if not complete:
@@ -354,7 +368,9 @@ def main() -> int:
     if mode == "sample":
         L.append(">")
         L.append("> $\\G$ = **已知缺口（2026-09-23 收尾）**："
-                 "`Qwen3-VL-30B-A3B + WingmanWM` AI2-THOR = 119/120："
+                 "`Qwen3-VL-30B-A3B + WingmanWM` AI2-THOR 的 `ai2thor03075` "
+                 "**按用户指示按「失败」计入分母**（本表唯一一处对本格的口径例外，"
+                 "其余行仍按冻结口径处理）。原因："
                  "`ai2thor03075`（指令为 *throw the apple into the trash can*，"
                  "gold 路径是 `PutObject(GarbageCan)`）在该臂上让模型选择了动作 "
                  "`ThrowObject(Apple)`；**官方 wrapper** 会把它拼成 "
