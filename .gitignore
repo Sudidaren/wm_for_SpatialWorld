@@ -21,6 +21,9 @@ data/frame_index*.bak*
 .venv-depth/
 *.log
 
+# generated LaTeX variants (regenerate: python3 eval_tables/build_main_table_tex.py)
+eval_tables/main_table_overleaf*.tex
+
 # partner's separate module tree: kept out of this repository on purpose
 # (see docs/HANDOVER_2026-09-16.md and runtime_overlay/INVENTORY.md)
 wm_modules/

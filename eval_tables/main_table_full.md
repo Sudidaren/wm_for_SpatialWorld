@@ -19,9 +19,6 @@
 | Qwen3-VL-8B (BF16, vLLM)  | ProcTHOR | 127 | **0.0%** | **34.6** | **5.3** | **534k** | 114/127 · ep20 |
 | Kimi-VL-A3B (BF16, vLLM) $\L$ | AI2-THOR | 311 | **2.5%** | **13.6** | **8.7** | **178k** | 279/311 · ep120 |
 | Kimi-VL-A3B (BF16, vLLM)  | ProcTHOR | 127 | **0.0%** | **20.5** | **5.8** | **311k** | 125/127 · ep20 |
-| Qwen3-VL-30B-A3B + WingmanWM v1 $\S$ | AI2-THOR | 311 | **5.5%** | **21.2** | **-** | **253k** | 308/311 · ep0 |
-| Qwen3-VL-8B + WingmanWM v1 $\S$ | AI2-THOR | 311 | **5.1%** | **24.1** | **-** | **292k** | 272/311 · ep0 |
-| Kimi-VL-A3B + WingmanWM v1 $\S$ | AI2-THOR | 311 | **2.3%** | **13.3** | **-** | **162k** | 262/311 · ep0 |
 | Gemini 3.1 Pro  | AI2-THOR | 311 | **19.6%** | **12.4** | **3.0** | **143k** | 311/311 |
 | Gemini 3.1 Pro (frozen v1) $\dagger$ | ProcTHOR | 127 | **0.8%** | **47.3** | **4.5** | **1441k** | 127/127 ⚠️partial |
 | Gemini 3.1 Pro + WingmanWM  | AI2-THOR | 311 | **26.9%** | **24.5** | **4.6** | **509k** | 219/311 |
@@ -36,7 +33,7 @@
 
 > $\aleph$ = **该批 ProcTHOR 没有接入 WM**（2026-09-21 之前 procthor 的 agent 循环里根本没有 MemoryProbe，当天修的正是这个）——这几行的数值等同纯基线，**不得当作 WM 结果引用**，重跑未做。
 >
-> $\S$ = **WingmanWM v1**（2026-09-16/17 那批，`WM_TARGET_HINT` 与 `WM_STATE_CHECK` 全关）——测的是「只给记忆、不给提示」的底数，与上面不带标记的 v2（两道通道全开）是**不同方法变体**，不能混着比。
+> **版本口径（2026-09-23 用户指示）**：**WM 行不分版本**，只列当前版本（`WM_TARGET_HINT=1` + `WM_STATE_CHECK=1`，两道注入通道全开）。2026-09-16/17 的 v1 变体（两个开关全关、只给记忆不给提示）不再单独列行，数据仍保留在 `spatialworld_eval/runs/wmv1_{q30b,q8b,kimi}_a311/`。
 >
 > $\P$ = **2026-09-22 重跑**（run `main8b_wm_procthor20`，卡 `connect.bjb1.seetacloud.com:25766`）——原 $\aleph$ 那格在 09-21 修好 ProcTHOR 的 WM 接入之前跑，等于纯基线；本次 WM 感知栈（RF-DETR + DA2 深度）改在 GPU 上跑，同一套 20 条样本、同一 BF16 权重、同一注入参数（`WM_TARGET_HINT=1`、`WM_STATE_CHECK=1`）。结果 20/20 判定、`episode_*.json` 20/20，所以 **Avg invalid actions 首次可填（2.40）**；步数 22.2→38.1、token 277k→592k 即 WM 真正在注入提示的证据。来源：`spatialworld_eval/runs/main8b_wm_procthor20`（2026-09-22 20:40 完成，rc=0）。
 >

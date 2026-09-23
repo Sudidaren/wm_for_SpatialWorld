@@ -100,14 +100,11 @@ BATCHES = [
       "mainkimi_base_ai2thor120_fill8"], "ai2thor", 311, True, r"$\L$", None),
     ("Kimi-VL-A3B (BF16, vLLM)", "ProcTHOR",
      ["kimi_base_438_v1", "mainkimi_base_procthor20"], "procthor", 127, True, "", None),
-    # ---- WM v1（2026-09-16/17 那批：target_hint 与 state_check 全关，
-    #      测的是"只给记忆、不给提示"的底数；与 v2 是不同方法变体）----
-    ("Qwen3-VL-30B-A3B + WingmanWM v1", "AI2-THOR",
-     ["wmv1_q30b_a311"], "ai2thor", 311, True, r"$\S$", None),
-    ("Qwen3-VL-8B + WingmanWM v1", "AI2-THOR",
-     ["wmv1_q8b_a311"], "ai2thor", 311, True, r"$\S$", None),
-    ("Kimi-VL-A3B + WingmanWM v1", "AI2-THOR",
-     ["wmv1_kimi_a311"], "ai2thor", 311, True, r"$\S$", None),
+    # 2026-09-23 用户指示「不要分版本」：WM 只保留当前版本的行
+    # （`WM_TARGET_HINT=1` + `WM_STATE_CHECK=1`）。2026-09-16/17 的 v1 变体
+    # （两个开关全关，只给记忆不给提示）不再单独列行——那三行既不是主表的方法，
+    # 又是 Avg invalid actions 唯一填不出来的格子。原始数据仍在
+    # `spatialworld_eval/runs/wmv1_{q30b,q8b,kimi}_a311/`。
     # Complete 311-task AI2-THOR numbers for Gemini: the legacy trajectories
     # replayed through the fixed verifier (the original verdicts were broken).
     ("Gemini 3.1 Pro", "AI2-THOR",
@@ -374,9 +371,10 @@ def main() -> int:
              "循环里根本没有 MemoryProbe，当天修的正是这个）——这几行的数值等同纯基线，"
              "**不得当作 WM 结果引用**，重跑未做。")
     L.append(">")
-    L.append("> $\\S$ = **WingmanWM v1**（2026-09-16/17 那批，`WM_TARGET_HINT` 与 "
-             "`WM_STATE_CHECK` 全关）——测的是「只给记忆、不给提示」的底数，"
-             "与上面不带标记的 v2（两道通道全开）是**不同方法变体**，不能混着比。")
+    L.append("> **版本口径（2026-09-23 用户指示）**：**WM 行不分版本**，只列当前版本"
+             "（`WM_TARGET_HINT=1` + `WM_STATE_CHECK=1`，两道注入通道全开）。"
+             "2026-09-16/17 的 v1 变体（两个开关全关、只给记忆不给提示）不再单独"
+             "列行，数据仍保留在 `spatialworld_eval/runs/wmv1_{q30b,q8b,kimi}_a311/`。")
     L.append(">")
     L.append("> $\\P$ = **2026-09-22 重跑**（run `main8b_wm_procthor20`，卡 "
              "`connect.bjb1.seetacloud.com:25766`）——原 $\\aleph$ 那格在 09-21 修好 "
@@ -413,9 +411,8 @@ def main() -> int:
                  "argument: 'objectId'` 并 `should_continue=False` **终止该 episode**，"
                  "该 episode 确实以失败告终，因此**按用户指示按「失败」计入分母**"
                  "（不按冻结口径排除；本表只此一处这样处理）。"
-                 "另：`WingmanWM v1` 三行、Gemini 两行的缺口见 `· ep0` 与 "
-                 "`⚠️partial`：属 2026-09-16/17 与 09-21 的历史批次遗留，"
-                 "要补必须按各自配置重跑。")
+                 "另：Gemini 的 `⚠️partial` 属 09-21 的历史批次遗留，"
+                 "要补必须按原配置重跑。")
     if mode == "sample":
         L.append(">")
         L.append("> **本表所有模型都只取同一套共同样本**（AI2-THOR 120 / ProcTHOR 20，"
