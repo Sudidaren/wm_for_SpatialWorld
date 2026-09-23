@@ -9,7 +9,7 @@
 |---|---|---:|---:|---:|---:|---:|---|
 | Qwen3-VL-30B-A3B (BF16, vLLM)  | AI2-THOR | 120 | **6.7%** | **18.4** | **12.3** | **209k** | 120/120 |
 | Qwen3-VL-30B-A3B (BF16, vLLM)  | ProcTHOR | 20 | **0.0%** | **16.0** | **5.0** | **-** | 20/20 |
-| Qwen3-VL-30B-A3B + WingmanWM $\L$ | AI2-THOR | 120 | **8.3%** | **22.5** | **10.2** | **276k** | 120/120 |
+| Qwen3-VL-30B-A3B + WingmanWM $\L$ | AI2-THOR | 120 | **8.4%** | **22.7** | **10.3** | **278k** | 119/120 |
 | Qwen3-VL-30B-A3B + WingmanWM  | ProcTHOR | 20 | **0.0%** | **39.3** | **8.8** | **659k** | 20/20 |
 | Qwen3-VL-8B + WingmanWM $\L$ | AI2-THOR | 120 | **4.2%** | **24.0** | **11.6** | **295k** | 120/120 |
 | Qwen3-VL-8B + WingmanWM $\P$ | ProcTHOR | 20 | **0.0%** | **38.1** | **2.4** | **592k** | 20/20 |
@@ -43,6 +43,6 @@
 >
 > $\L$ = **2026-09-23 本地渲染 + 云端 vLLM 补跑**（§8.4/§9.4）。有 7 条 AI2-THOR 任务（`ai2thor05022/05024/05028/05029/05515/05519/05521`）在云端每条臂上都会卡死在第一个 `step`（`pending`、attempts=3），另有 `ai2thor03075` 记为 env_error；这几条改在**本机渲染**（AI2-THOR Linux64 + `DISPLAY=:0`）、**模型仍走云端 vLLM**（`BASE_URL=http://127.0.0.1:1800x/v1`，隧道直连对应卡）跑，任务集、BF16 权重、注入参数（`WM_TARGET_HINT=1`、`WM_STATE_CHECK=1`、`LIGHTWM_DEPTH_SOURCE=da2`）与主表一致。run：`main8b_wm_missing8_local`、`main8b_base_ai2thor120_fill7`、`mainkimi_base_ai2thor120_fill8`、`main30b_wm_ai2thor120_fill8`、`mainkimi_wm_ai2thor120_fill8`（2026-09-23）。
 >
-> $\G$ = **已知缺口（2026-09-23 收尾）**：`Qwen3-VL-30B-A3B + WingmanWM` AI2-THOR 的 `ai2thor03075` **按用户指示按「失败」计入分母**（本表唯一一处对本格的口径例外，其余行仍按冻结口径处理）。原因：`ai2thor03075`（指令为 *throw the apple into the trash can*，gold 路径是 `PutObject(GarbageCan)`）在该臂上让模型选择了动作 `ThrowObject(Apple)`；**官方 wrapper** 会把它拼成 `{action: "ThrowObject", objectId: <id>, moveMagnitude: 150}`，而 AI2-THOR 的 `ThrowObject` 只接受 `moveMagnitude`/`forceAction`（不接受 `objectId`），于是 `controller.step` 抛 `ValueError`，**官方 runner**（上游 init 提交）的 `except Exception` 再把它写成 `Environment exception: Action "ThrowObject" called with invalid argument: 'objectId'` 并 `should_continue=False` **终止该 episode**，失败类型记 `env_error`，按口径不计入分母（该任务在 8B+WM、Kimi-base、Gemini、GPT-5 等臂上都能正常判定）。另：`WingmanWM v1` 三行、Gemini 两行的缺口见 `· ep0` 与 `⚠️partial`：属 2026-09-16/17 与 09-21 的历史批次遗留，要补必须按各自配置重跑。
+> $\G$ = **已知缺口（2026-09-23 收尾）**：`Qwen3-VL-30B-A3B + WingmanWM` AI2-THOR = 119/120：`ai2thor03075`（指令为 *throw the apple into the trash can*，gold 路径是 `PutObject(GarbageCan)`）在该臂上让模型选择了动作 `ThrowObject(Apple)`；**官方 wrapper** 会把它拼成 `{action: "ThrowObject", objectId: <id>, moveMagnitude: 150}`，而 AI2-THOR 的 `ThrowObject` 只接受 `moveMagnitude`/`forceAction`（不接受 `objectId`），于是 `controller.step` 抛 `ValueError`，**官方 runner**（上游 init 提交）的 `except Exception` 再把它写成 `Environment exception: Action "ThrowObject" called with invalid argument: 'objectId'` 并 `should_continue=False` **终止该 episode**，失败类型按官方记为 `env_error`，**依冻结口径不计入分母**（同一任务在 8B+WM、Kimi-base、Gemini、GPT-5 等臂上都能正常判定，只有 30B 臂会走到这条官方路径）。另：`WingmanWM v1` 三行、Gemini 两行的缺口见 `· ep0` 与 `⚠️partial`：属 2026-09-16/17 与 09-21 的历史批次遗留，要补必须按各自配置重跑。
 >
 > **本表所有模型都只取同一套共同样本**（AI2-THOR 120 / ProcTHOR 20，分层抽样、与 311/127 同分布），这样跨模型可以直接比。各模型自己跑过的完整批次见 `main_table_full.md`。
