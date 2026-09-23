@@ -116,7 +116,8 @@ BATCHES = [
      ["gemini31pro_procthor127_frozen_v1"], "procthor", 127, False, r"$\dagger$", None),
     # ---- 2026-09-21 夜：闭源主批次（120 + 20 分层样本）----
     ("Gemini 3.1 Pro + WingmanWM", "AI2-THOR",
-     ["wm_gemini31pro_fix40", "wm_gemini31pro_fix_rest156", "closed_gemini_wm"],
+     ["wm_gemini31pro_fix40", "wm_gemini31pro_fix_rest156", "closed_gemini_wm",
+      "closed_gemini_wm_fill1"],
      "ai2thor", 120, True, "", "ai2thor"),
     ("Gemini 3.1 Pro + WingmanWM", "ProcTHOR",
      ["closed_gemini_wm"], "procthor", 20, True, "", "procthor"),
