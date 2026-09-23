@@ -30,6 +30,14 @@ from typing import Dict, List, Optional
 RUNS = "/home/sudidaren/spatialworld_eval/runs"
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXTERNAL = {"api_error", "env_error", "external_error", "external"}
+
+#: 2026-09-23 用户指示：`ai2thor03075` 不按冻结口径排除，而是**按失败计入分母**。
+#: 理由：这条 episode 确实以失败告终（官方 wrapper 把模型合理的 `ThrowObject(...)`
+#: 拼成非法参数 → controller 抛 ValueError → 官方 runner 终止 episode）。
+#: 只对下面这些 (方法, 环境) 行、这些任务生效。
+FORCE_FAILURE = {
+    ("Qwen3-VL-30B-A3B + WingmanWM", "AI2-THOR"): {"ai2thor03075"},
+}
 #: 旧的三张卡下线了，卡上那两条 GPT-5 臂的 episode 没法再取；这些 run 名
 #: 对应的是从卡上拉回来的 results.csv（没有 episode 目录），无效动作列会缺。
 STALE_CARD_RUNS = {"main_gpt5_base_s0", "main_gpt5_base_s1", "main_gpt5_base_s2",
@@ -181,7 +189,8 @@ def _episode(runs, env: str, task_id: str) -> Optional[Dict]:
     return None
 
 
-def stats(runs, env: str, planned: int, allowed: Optional[set] = None) -> Dict:
+def stats(runs, env: str, planned: int, allowed: Optional[set] = None,
+          force_fail: Optional[set] = None) -> Dict:
     rows = _rows(runs)
     #: 有些 run 的 results.csv 同时含 ai2thor 与 procthor（例如云上那三批
     #: `wmv_*_438_v2`），必须按 Environment 列过滤，否则两个环境会互相污染。
@@ -192,6 +201,11 @@ def stats(runs, env: str, planned: int, allowed: Optional[set] = None) -> Dict:
     succ, null, fail = [], [], []
     for r in rows:
         st, ft = _g(r, "Status"), _g(r, "Failure Type")
+        tid = _g(r, "Task ID") or _g(r, "task_id")
+        #: 用户指定：这些任务即使被官方记成 env_error，也按"失败"计入分母。
+        if force_fail and tid in force_fail and st in ("failed_model", "failed_external"):
+            fail.append(r)
+            continue
         #: 只有 success / failed_model 才是"判定过"。`pending`（卡中途下线，
         #: 任务没跑完）和空 Status 都算没判定 —— 2026-09-22 核查时发现旧逻辑
         #: 把 7 条 pending 当成了失败，把 GPT-5 基线从 19.5% 压到 18.3%。
@@ -290,7 +304,8 @@ def main() -> int:
             filt = None
             #: 全量表：N 用该环境的全集规模，Coverage 才表示"实际跑到多少"。
             planned = 311 if envdir == "ai2thor" else 127
-        s = stats(runs, envdir, planned, _allowed(filt))
+        s = stats(runs, envdir, planned, _allowed(filt),
+                  FORCE_FAILURE.get((method, env)))
         data.append((method, env, s))
         cov = f"{s['decided']}/{planned}"
         if not complete:
@@ -364,9 +379,8 @@ def main() -> int:
                  "**官方 runner**（上游 init 提交）的 `except Exception` 再把它写成 "
                  "`Environment exception: Action \"ThrowObject\" called with invalid "
                  "argument: 'objectId'` 并 `should_continue=False` **终止该 episode**，"
-                 "失败类型按官方记为 `env_error`，**依冻结口径不计入分母**"
-                 "（同一任务在 8B+WM、Kimi-base、Gemini、GPT-5 等臂上都能正常判定，"
-                 "只有 30B 臂会走到这条官方路径）。"
+                 "该 episode 确实以失败告终，因此**按用户指示按「失败」计入分母**"
+                 "（不按冻结口径排除；本表只此一处这样处理）。"
                  "另：`WingmanWM v1` 三行、Gemini 两行的缺口见 `· ep0` 与 "
                  "`⚠️partial`：属 2026-09-16/17 与 09-21 的历史批次遗留，"
                  "要补必须按各自配置重跑。")
