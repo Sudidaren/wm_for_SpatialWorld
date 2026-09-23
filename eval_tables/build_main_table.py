@@ -51,27 +51,34 @@ BATCHES = [
     # 注意：这三批的 ProcTHOR 是**在 WM 接入 procthor 之前**跑的，等于纯基线，
     # 用 $\aleph$ 标出来，不许当 WM 结果引用。
     ("Qwen3-VL-30B-A3B + WingmanWM", "AI2-THOR",
-     ["wmv_q30b_438_v2"], "ai2thor", 311, True, "", None),
+     ["wm_q30b_438_v2", "wmv_q30b_438_v2", "main30b_wm_ai2thor120",
+      "main30b_wm_ai2thor120_fill8"], "ai2thor", 311, True, r"$\L$", None),
     ("Qwen3-VL-30B-A3B + WingmanWM", "ProcTHOR",
-     ["wmv_q30b_438_v2"], "procthor", 127, True, r"$\aleph$", None),
+     ["main30b_wm_procthor20"], "procthor", 127, True, "", None),
     ("Qwen3-VL-8B + WingmanWM", "AI2-THOR",
-     ["wmv_q8b_438_v2"], "ai2thor", 311, True, "", None),
+     ["wm_q8b_438_v2", "wmv_q8b_438_v2", "main8b_wm_missing8",
+      "main8b_wm_missing8_local"], "ai2thor", 311, True, r"$\L$", None),
     ("Qwen3-VL-8B + WingmanWM", "ProcTHOR",
-     ["wmv_q8b_438_v2"], "procthor", 127, True, r"$\aleph$", None),
+     ["main8b_wm_procthor20"], "procthor", 127, True,
+     r"$\P$", None),
     ("Kimi-VL-A3B + WingmanWM", "AI2-THOR",
-     ["wmv_kimi_438_v2"], "ai2thor", 311, True, "", None),
+     ["wm_kimi_438_v2", "wmv_kimi_438_v2", "mainkimi_wm_ai2thor120",
+      "mainkimi_wm_ai2thor120_fill8"], "ai2thor", 311, True, r"$\L$", None),
     ("Kimi-VL-A3B + WingmanWM", "ProcTHOR",
-     ["wmv_kimi_438_v2"], "procthor", 127, True, r"$\aleph$", None),
+     ["mainkimi_wm_procthor20"], "procthor", 127, True, "", None),
     # 8B / Kimi 的纯基线：当时只落了 state.json 没落 results.csv，2026-09-22
     # 从 wm_dev/pull_latest/*.state.json 转出来的（438 条整批）。
     ("Qwen3-VL-8B (BF16, vLLM)", "AI2-THOR",
-     ["q8b_base_438_v1"], "ai2thor", 311, True, "", None),
+     ["q8b_base_438_v1", "main8b_base_ai2thor120",
+      "main8b_base_ai2thor120_fill7"], "ai2thor", 311, True, r"$\L$", None),
     ("Qwen3-VL-8B (BF16, vLLM)", "ProcTHOR",
-     ["q8b_base_438_v1"], "procthor", 127, True, "", None),
+     ["q8b_base_438_v1", "main8b_base_procthor20",
+      "main8b_base_procthor20_fill2"], "procthor", 127, True, "", None),
     ("Kimi-VL-A3B (BF16, vLLM)", "AI2-THOR",
-     ["kimi_base_438_v1"], "ai2thor", 311, True, "", None),
+     ["kimi_base_438_v1", "mainkimi_base_ai2thor120_local",
+      "mainkimi_base_ai2thor120_fill8"], "ai2thor", 311, True, r"$\L$", None),
     ("Kimi-VL-A3B (BF16, vLLM)", "ProcTHOR",
-     ["kimi_base_438_v1"], "procthor", 127, True, "", None),
+     ["kimi_base_438_v1", "mainkimi_base_procthor20"], "procthor", 127, True, "", None),
     # ---- WM v1（2026-09-16/17 那批：target_hint 与 state_check 全关，
     #      测的是"只给记忆、不给提示"的底数；与 v2 是不同方法变体）----
     ("Qwen3-VL-30B-A3B + WingmanWM v1", "AI2-THOR",
@@ -93,14 +100,16 @@ BATCHES = [
     ("Gemini 3.1 Pro + WingmanWM", "ProcTHOR",
      ["closed_gemini_wm"], "procthor", 20, True, "", "procthor"),
     ("GPT-5", "AI2-THOR",
-     ["main_gpt5_base_s0", "main_gpt5_base_s1", "main_gpt5_base_s2"],
+     ["main_gpt5_base_s0", "main_gpt5_base_s1", "main_gpt5_base_s2",
+      "closed_gpt5_base_fill7"],
      "ai2thor", 120, True, r"$\star$", "ai2thor"),
     ("GPT-5", "ProcTHOR",
      ["main_gpt5_base_s0", "main_gpt5_base_s1", "main_gpt5_base_s2",
       "closed_gpt5_base_procthor"],
      "procthor", 20, True, r"$\star$", "procthor"),
     ("GPT-5 + WingmanWM", "AI2-THOR",
-     ["main_gpt5_wm_s0", "main_gpt5_wm_s1", "main_gpt5_wm_s2", "closed_gpt5_wm"],
+     ["main_gpt5_wm_s0", "main_gpt5_wm_s1", "main_gpt5_wm_s2", "closed_gpt5_wm",
+      "closed_gpt5_wm_fill2"],
      "ai2thor", 120, True, r"$\ddagger$", "ai2thor"),
     ("GPT-5 + WingmanWM", "ProcTHOR",
      ["main_gpt5_wm_procthor", "closed_gpt5_wm_procthor"],
@@ -118,10 +127,16 @@ def _allowed(kind: Optional[str]) -> Optional[set]:
 
 
 def _rows(runs) -> List[Dict]:
-    """读一个或多个 run 的 results.csv；同名任务后者覆盖前者（用于拼接分片）。"""
+    """读一个或多个 run 的 results.csv；同名任务后者覆盖前者（用于拼接分片）。
+
+    2026-09-23 补充：**已判定的记录优先于未判定的记录**。补跑批次被中途打断时，
+    会把"还没跑完"的任务写成 failed_external/pending；如果按纯"后者覆盖"合并，
+    这些未判定行会盖掉主批次里已经判定好的结果（实测踩到：Kimi+WM 的 05515）。
+    """
     if isinstance(runs, str):
         runs = [runs]
     merged: Dict[str, Dict] = {}
+    decided: Dict[str, bool] = {}
     for run in runs:
         p = os.path.join(RUNS, run, "results.csv")
         if not os.path.isfile(p):
@@ -130,7 +145,12 @@ def _rows(runs) -> List[Dict]:
             for r in csv.DictReader(fh):
                 tid = _g(r, "Task ID") or _g(r, "task_id")
                 if tid:
+                    is_decided = (_g(r, "Status") in ("success", "failed_model")
+                                  and _g(r, "Failure Type") not in EXTERNAL)
+                    if tid in merged and decided.get(tid) and not is_decided:
+                        continue
                     merged[tid] = r
+                    decided[tid] = is_decided
     return list(merged.values())
 
 
@@ -143,19 +163,22 @@ def _episode(runs, env: str, task_id: str) -> Optional[Dict]:
     #   <run>/procthor/<task>/worker_N/episode_*.json
     # while ai2thor nests one more level:
     #   <run>/ai2thor/<task>/worker_N/<task>/episode_*.json
+    #: 2026-09-23 修正：原来按 mtime 取"最新"，但 `cp` 会把 mtime 重置成拷贝时刻，
+    #: 导致合并多个 run 后随机选中残档（实测：GPT-5 ProcTHOR 选中了 1 步的 stub，
+    #: steps 显示 1.0）。改成**按 run 列表顺序取**，与 results.csv 的"后者优先"一致。
     if isinstance(runs, str):
         runs = [runs]
-    hits = []
-    for run in runs:
-        hits += glob.glob(os.path.join(RUNS, run, env, task_id, "**",
-                                       "episode_*.json"), recursive=True)
-    if not hits:
-        return None
-    try:
-        with open(max(hits, key=os.path.getmtime), encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
-        return None
+    for run in reversed(runs):
+        hits = glob.glob(os.path.join(RUNS, run, env, task_id, "**",
+                                      "episode_*.json"), recursive=True)
+        if not hits:
+            continue
+        try:
+            with open(max(hits, key=os.path.getmtime), encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception:
+            continue
+    return None
 
 
 def stats(runs, env: str, planned: int, allowed: Optional[set] = None) -> Dict:
@@ -307,6 +330,41 @@ def main() -> int:
     L.append("> $\\S$ = **WingmanWM v1**（2026-09-16/17 那批，`WM_TARGET_HINT` 与 "
              "`WM_STATE_CHECK` 全关）——测的是「只给记忆、不给提示」的底数，"
              "与上面不带标记的 v2（两道通道全开）是**不同方法变体**，不能混着比。")
+    L.append(">")
+    L.append("> $\\P$ = **2026-09-22 重跑**（run `main8b_wm_procthor20`，卡 "
+             "`connect.bjb1.seetacloud.com:25766`）——原 $\\aleph$ 那格在 09-21 修好 "
+             "ProcTHOR 的 WM 接入之前跑，等于纯基线；本次 WM 感知栈（RF-DETR + DA2 深度）"
+             "改在 GPU 上跑，同一套 20 条样本、同一 BF16 权重、同一注入参数"
+             "（`WM_TARGET_HINT=1`、`WM_STATE_CHECK=1`）。结果 20/20 判定、"
+             "`episode_*.json` 20/20，所以 **Avg invalid actions 首次可填（2.40）**；"
+             "步数 22.2→38.1、token 277k→592k 即 WM 真正在注入提示的证据。来源："
+             "`spatialworld_eval/runs/main8b_wm_procthor20`（2026-09-22 20:40 完成，rc=0）。")
+    L.append(">")
+    L.append("> $\\L$ = **2026-09-23 本地渲染 + 云端 vLLM 补跑**（§8.4/§9.4）。"
+             "有 7 条 AI2-THOR 任务（`ai2thor05022/05024/05028/05029/05515/05519/05521`）"
+             "在云端每条臂上都会卡死在第一个 `step`（`pending`、attempts=3），"
+             "另有 `ai2thor03075` 记为 env_error；这几条改在**本机渲染**"
+             "（AI2-THOR Linux64 + `DISPLAY=:0`）、**模型仍走云端 vLLM**"
+             "（`BASE_URL=http://127.0.0.1:1800x/v1`，隧道直连对应卡）跑，"
+             "任务集、BF16 权重、注入参数（`WM_TARGET_HINT=1`、`WM_STATE_CHECK=1`、"
+             "`LIGHTWM_DEPTH_SOURCE=da2`）与主表一致。run："
+             "`main8b_wm_missing8_local`、`main8b_base_ai2thor120_fill7`、"
+             "`mainkimi_base_ai2thor120_fill8`、`main30b_wm_ai2thor120_fill8`、"
+             "`mainkimi_wm_ai2thor120_fill8`（2026-09-23）。")
+    if mode == "sample":
+        L.append(">")
+        L.append("> $\\G$ = **已知缺口（2026-09-23 收尾）**："
+                 "`Qwen3-VL-30B-A3B + WingmanWM` AI2-THOR = 119/120："
+                 "`ai2thor03075`（指令为 *throw the apple into the trash can*，"
+                 "gold 路径是 `PutObject(GarbageCan)`）在该臂上让模型选择了 "
+                 "`ThrowObject(objectId=...)`——AI2-THOR 的 `ThrowObject` 只接受 "
+                 "`moveMagnitude`，于是模拟器抛 `Environment exception: "
+                 "Action \"ThrowObject\" called with invalid argument: 'objectId'`，"
+                 "失败类型记 `env_error`，按口径不计入分母（该任务在 8B+WM、"
+                 "Kimi-base、Gemini、GPT-5 等臂上都能正常判定）。"
+                 "另：`WingmanWM v1` 三行、Gemini 两行的缺口见 `· ep0` 与 "
+                 "`⚠️partial`：属 2026-09-16/17 与 09-21 的历史批次遗留，"
+                 "要补必须按各自配置重跑。")
     if mode == "sample":
         L.append(">")
         L.append("> **本表所有模型都只取同一套共同样本**（AI2-THOR 120 / ProcTHOR 20，"

@@ -22,20 +22,20 @@
     \multirow{2}{*}{Qwen3-VL-30B-A3B} & AI2-THOR & 311 & 20 & 291 & 0 & 6.4\% & 18.0 & 13.0 (72\%) \\
      & ProcTHOR & 127 & 0 & 127 & 0 & 0.0\% & 17.6 & 4.9 (28\%) \\
     \cmidrule(l){1-9}
-    \multirow{2}{*}{Qwen3-VL-30B-A3B + WingmanWM} & AI2-THOR & 311 & 22 & 258 & 31 & 7.9\%$\dagger$ & 22.7 & ---- \\
-     & ProcTHOR & 127 & 0 & 126 & 1 & 0.0\%$\dagger$ & 15.0 & ---- \\
+    \multirow{2}{*}{Qwen3-VL-30B-A3B + WingmanWM} & AI2-THOR & 311 & 24 & 264 & 23 & 8.3\%$\dagger$ & 22.5 & 9.6 (43\%) \\
+     & ProcTHOR & 127 & 0 & 20 & 0 & 0.0\%$\dagger$ & 39.3 & 8.8 (23\%) \\
     \cmidrule(l){1-9}
-    \multirow{2}{*}{Qwen3-VL-8B + WingmanWM} & AI2-THOR & 311 & 11 & 268 & 32 & 3.9\%$\dagger$ & 24.0 & ---- \\
-     & ProcTHOR & 127 & 0 & 121 & 6 & 0.0\%$\dagger$ & 29.1 & ---- \\
+    \multirow{2}{*}{Qwen3-VL-8B + WingmanWM} & AI2-THOR & 311 & 12 & 276 & 23 & 4.2\%$\dagger$ & 23.7 & 10.6 (45\%) \\
+     & ProcTHOR & 127 & 0 & 20 & 0 & 0.0\%$\dagger$ & 38.1 & 2.4 (6\%) \\
     \cmidrule(l){1-9}
-    \multirow{2}{*}{Kimi-VL-A3B + WingmanWM} & AI2-THOR & 311 & 6 & 265 & 40 & 2.2\%$\dagger$ & 15.0 & ---- \\
-     & ProcTHOR & 127 & 0 & 124 & 3 & 0.0\%$\dagger$ & 18.3 & ---- \\
+    \multirow{2}{*}{Kimi-VL-A3B + WingmanWM} & AI2-THOR & 311 & 7 & 282 & 22 & 2.4\%$\dagger$ & 14.4 & 6.2 (43\%) \\
+     & ProcTHOR & 127 & 0 & 20 & 0 & 0.0\%$\dagger$ & 29.6 & 5.0 (17\%) \\
     \cmidrule(l){1-9}
-    \multirow{2}{*}{Qwen3-VL-8B (BF16, vLLM)} & AI2-THOR & 311 & 6 & 261 & 44 & 2.2\%$\dagger$ & 25.1 & ---- \\
-     & ProcTHOR & 127 & 0 & 113 & 14 & 0.0\%$\dagger$ & 37.6 & ---- \\
+    \multirow{2}{*}{Qwen3-VL-8B (BF16, vLLM)} & AI2-THOR & 311 & 6 & 273 & 32 & 2.2\%$\dagger$ & 24.4 & 18.6 (76\%) \\
+     & ProcTHOR & 127 & 0 & 114 & 13 & 0.0\%$\dagger$ & 34.6 & 5.3 (15\%) \\
     \cmidrule(l){1-9}
-    \multirow{2}{*}{Kimi-VL-A3B (BF16, vLLM)} & AI2-THOR & 311 & 5 & 262 & 44 & 1.9\%$\dagger$ & 13.4 & ---- \\
-     & ProcTHOR & 127 & 0 & 125 & 2 & 0.0\%$\dagger$ & 18.8 & ---- \\
+    \multirow{2}{*}{Kimi-VL-A3B (BF16, vLLM)} & AI2-THOR & 311 & 7 & 272 & 32 & 2.5\%$\dagger$ & 13.6 & 8.7 (64\%) \\
+     & ProcTHOR & 127 & 0 & 125 & 2 & 0.0\%$\dagger$ & 20.5 & 5.8 (28\%) \\
     \cmidrule(l){1-9}
     Qwen3-VL-30B-A3B + WingmanWM v1 & AI2-THOR & 311 & 17 & 291 & 3 & 5.5\%$\dagger$ & 21.2 & ---- \\
     Qwen3-VL-8B + WingmanWM v1 & AI2-THOR & 311 & 14 & 258 & 39 & 5.1\%$\dagger$ & 24.1 & ---- \\
@@ -45,10 +45,10 @@
     \multirow{2}{*}{Gemini 3.1 Pro + WingmanWM} & AI2-THOR & 120 & 43 & 76 & 1 & 36.1\%$\dagger$ & 23.0 & 4.0 (17\%) \\
      & ProcTHOR & 20 & 2 & 18 & 0 & 10.0\% & 42.6 & 3.2 (8\%) \\
     \cmidrule(l){1-9}
-    \multirow{2}{*}{GPT-5} & AI2-THOR & 120 & 22 & 91 & 7 & 19.5\%$\dagger$ & 23.7 & ---- \\
+    \multirow{2}{*}{GPT-5} & AI2-THOR & 120 & 23 & 97 & 0 & 19.2\% & 23.3 & 8.3 (36\%) \\
      & ProcTHOR & 20 & 0 & 20 & 0 & 0.0\% & 53.5 & 4.6 (9\%) \\
     \cmidrule(l){1-9}
-    \multirow{2}{*}{GPT-5 + WingmanWM} & AI2-THOR & 120 & 36 & 82 & 2 & 30.5\%$\dagger$ & 22.8 & 6.5 (29\%) \\
+    \multirow{2}{*}{GPT-5 + WingmanWM} & AI2-THOR & 120 & 36 & 84 & 0 & 30.0\% & 22.8 & 7.3 (32\%) \\
      & ProcTHOR & 20 & 0 & 20 & 0 & 0.0\% & 40.5 & 2.5 (6\%) \\
     \bottomrule
   \end{tabular}
