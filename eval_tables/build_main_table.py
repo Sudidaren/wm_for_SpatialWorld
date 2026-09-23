@@ -64,7 +64,10 @@ BATCHES = [
     ("Qwen3-VL-30B-A3B (BF16, vLLM)", "AI2-THOR",
      ["qwen3vl30b_ai2thor_v1"], "ai2thor", 311, True, "", None),
     ("Qwen3-VL-30B-A3B (BF16, vLLM)", "ProcTHOR",
-     ["qwen3vl30b_procthor_v1"], "procthor", 127, True, "", None),
+     # 2026-09-23：原用 09-14 那批（记录里没写 token usage），改用 09-19/20 的
+     # 纯基线批次（同模型、无 WM：该半批 138 个日志 0 次 MemoryProbe），
+     # 判定同为 0.0%（20/20 失败），且带 token。
+     ["qwen3vl30b_procthor_v1", "wm_q30b_438_v2"], "procthor", 127, True, "", None),
     # ---- 自托管三臂 + WingmanWM（2026-09-21 云上批次）----
     # 注意：这三批的 ProcTHOR 是**在 WM 接入 procthor 之前**跑的，等于纯基线，
     # 用 $\aleph$ 标出来，不许当 WM 结果引用。

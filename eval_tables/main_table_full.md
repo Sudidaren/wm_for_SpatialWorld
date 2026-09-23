@@ -8,7 +8,7 @@
 | Method | Env | N | **TSR** | **Avg steps** | **Avg invalid actions** | **Avg tokens/task** | Coverage |
 |---|---|---:|---:|---:|---:|---:|---|
 | Qwen3-VL-30B-A3B (BF16, vLLM)  | AI2-THOR | 311 | **6.4%** | **18.0** | **13.0** | **202k** | 311/311 |
-| Qwen3-VL-30B-A3B (BF16, vLLM)  | ProcTHOR | 127 | **0.0%** | **17.6** | **4.9** | **-** | 127/127 |
+| Qwen3-VL-30B-A3B (BF16, vLLM)  | ProcTHOR | 127 | **0.0%** | **14.9** | **3.6** | **171k** | 127/127 |
 | Qwen3-VL-30B-A3B + WingmanWM $\L$ | AI2-THOR | 311 | **8.3%** | **22.4** | **9.6** | **272k** | 289/311 |
 | Qwen3-VL-30B-A3B + WingmanWM  | ProcTHOR | 127 | **0.0%** | **39.3** | **8.8** | **659k** | 20/127 |
 | Qwen3-VL-8B + WingmanWM $\L$ | AI2-THOR | 311 | **4.2%** | **23.7** | **10.6** | **289k** | 288/311 |
